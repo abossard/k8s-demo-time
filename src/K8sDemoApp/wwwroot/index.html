@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K8s Demo App</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background-color: #1f2933;
+      color: #f1f5f9;
+    }
+
+    body {
+      margin: 0;
+      padding: 1.5rem;
+      display: grid;
+      gap: 1.5rem;
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.875rem;
+    }
+
+    section {
+      background: rgba(15, 23, 42, 0.8);
+      padding: 1.25rem;
+      border-radius: 0.75rem;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.9);
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 1.25rem;
+      letter-spacing: 0.02em;
+    }
+
+    .grid {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .probe {
+      display: grid;
+      gap: 0.5rem;
+    }
+
+    .flex {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.95rem;
+    }
+
+    input {
+      padding: 0.4rem 0.6rem;
+      border-radius: 0.4rem;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.6);
+      color: inherit;
+      width: 6rem;
+    }
+
+    button {
+      padding: 0.45rem 0.85rem;
+      border-radius: 0.5rem;
+      border: 1px solid transparent;
+      background: #3b82f6;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
+    }
+
+    button.secondary {
+      background: rgba(148, 163, 184, 0.25);
+      color: inherit;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 15px -8px rgba(59, 130, 246, 0.5);
+    }
+
+    .status-card {
+      display: grid;
+      gap: 0.5rem;
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .status-chip.up {
+      background: rgba(34, 197, 94, 0.2);
+      color: #86efac;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .status-chip.down {
+      background: rgba(248, 113, 113, 0.2);
+      color: #fca5a5;
+      border: 1px solid rgba(248, 113, 113, 0.4);
+    }
+
+    #notifications {
+      min-height: 1.2rem;
+      font-size: 0.95rem;
+    }
+
+    @media (max-width: 640px) {
+      input {
+        width: 100%;
+      }
+
+      label {
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Kubernetes Demo Control Plane</h1>
+      <p id="notifications"></p>
+    </header>
+
+    <section id="instance">
+      <h2>Instance</h2>
+      <div class="status-card">
+        <div><strong>Hostname:</strong> <span id="hostname">–</span></div>
+        <div><strong>Started:</strong> <span id="started">–</span></div>
+        <div><strong>Uptime:</strong> <span id="uptime">–</span></div>
+        <div><strong>Last Updated:</strong> <span id="last-updated">–</span></div>
+      </div>
+    </section>
+
+    <section id="probes">
+      <h2>Probes</h2>
+      <div class="grid">
+        <div class="probe" data-probe="startup">
+          <div><span class="status-chip" id="status-startup">–</span></div>
+          <div class="flex">
+            <label>Downtime minutes
+              <input type="number" min="0.1" step="0.5" value="5" id="input-startup-minutes">
+            </label>
+            <button data-action="down">Take Down</button>
+            <button data-action="up" class="secondary">Restore</button>
+          </div>
+        </div>
+        <div class="probe" data-probe="readiness">
+          <div><span class="status-chip" id="status-readiness">–</span></div>
+          <div class="flex">
+            <label>Downtime minutes
+              <input type="number" min="0.1" step="0.5" value="5" id="input-readiness-minutes">
+            </label>
+            <button data-action="down">Take Down</button>
+            <button data-action="up" class="secondary">Restore</button>
+          </div>
+        </div>
+        <div class="probe" data-probe="liveness">
+          <div><span class="status-chip" id="status-liveness">–</span></div>
+          <div class="flex">
+            <label>Downtime minutes
+              <input type="number" min="0.1" step="0.5" value="5" id="input-liveness-minutes">
+            </label>
+            <button data-action="down">Take Down</button>
+            <button data-action="up" class="secondary">Restore</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="cpu">
+      <h2>CPU Stress</h2>
+      <div class="status-card">
+        <div><strong>Active:</strong> <span id="cpu-active">no</span></div>
+        <div><strong>Threads:</strong> <span id="cpu-threads">0</span></div>
+        <div><strong>Ends:</strong> <span id="cpu-ends">–</span></div>
+      </div>
+      <div class="flex" style="margin-top: 0.75rem;">
+        <label>Minutes
+          <input type="number" min="0.1" step="0.5" value="2" id="cpu-minutes">
+        </label>
+        <label>Threads
+          <input type="number" min="1" step="1" value="4" id="cpu-threads-input">
+        </label>
+        <button id="cpu-start">Start CPU Stress</button>
+        <button id="cpu-stop" class="secondary">Stop CPU Stress</button>
+      </div>
+    </section>
+
+    <section id="memory">
+      <h2>Memory Stress</h2>
+      <div class="status-card">
+        <div><strong>Active:</strong> <span id="memory-active">no</span></div>
+        <div><strong>Target MB:</strong> <span id="memory-target">0</span></div>
+        <div><strong>Ends:</strong> <span id="memory-ends">–</span></div>
+      </div>
+      <div class="flex" style="margin-top: 0.75rem;">
+        <label>Minutes
+          <input type="number" min="0.1" step="0.5" value="1" id="memory-minutes">
+        </label>
+        <label>Target (MB)
+          <input type="number" min="64" step="64" value="1024" id="memory-target-input">
+        </label>
+        <button id="memory-start">Start Memory Stress</button>
+        <button id="memory-stop" class="secondary">Stop Memory Stress</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const notificationEl = document.getElementById('notifications');
+
+    function setNotification(message, isError = false) {
+      if (!message) {
+        notificationEl.textContent = '';
+        notificationEl.style.color = '';
+        return;
+      }
+
+      notificationEl.textContent = message;
+      notificationEl.style.color = isError ? '#f87171' : '#86efac';
+    }
+
+    function formatDate(value) {
+      if (!value) {
+        return '–';
+      }
+
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return '–';
+      }
+
+      return date.toLocaleString();
+    }
+
+    function formatDuration(value) {
+      if (!value) {
+        return '–';
+      }
+
+      if (typeof value === 'number') {
+        if (!Number.isFinite(value) || value < 0) {
+          return '–';
+        }
+        const totalSeconds = Math.floor(value);
+        const hrs = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+        const mins = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+        const secs = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
+        return `${hrs}:${mins}:${secs}`;
+      }
+
+      if (typeof value === 'string') {
+        return value;
+      }
+
+      return '–';
+    }
+
+    async function refreshStatus() {
+      try {
+        const response = await fetch('/api/status', { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Status ${response.status}`);
+        }
+        const data = await response.json();
+        updateInstance(data);
+        updateProbes(data);
+        updateCpu(data);
+        updateMemory(data);
+        setNotification('');
+      } catch (error) {
+        setNotification(`Failed to load status: ${error.message}`, true);
+      }
+    }
+
+    function updateInstance(data) {
+      document.getElementById('hostname').textContent = data.hostname ?? '–';
+      document.getElementById('started').textContent = formatDate(data.startedAtUtc);
+      document.getElementById('uptime').textContent = formatDuration(data.uptime);
+      document.getElementById('last-updated').textContent = formatDate(data.currentTimeUtc);
+    }
+
+    function updateProbes(data) {
+      const probes = data.probes || {};
+      ['startup', 'readiness', 'liveness'].forEach(name => {
+        const info = probes[name];
+        const el = document.getElementById(`status-${name}`);
+        if (!el) {
+          return;
+        }
+
+        if (!info) {
+          el.className = 'status-chip down';
+          el.textContent = 'Unknown';
+          return;
+        }
+
+        el.className = `status-chip ${info.healthy ? 'up' : 'down'}`;
+        if (info.healthy) {
+          el.textContent = 'Up';
+        } else if (info.downUntilUtc) {
+          el.textContent = `Down until ${formatDate(info.downUntilUtc)}`;
+        } else {
+          el.textContent = 'Down';
+        }
+      });
+    }
+
+    function updateCpu(data) {
+      const cpu = (data.stress && data.stress.cpu) || {};
+      document.getElementById('cpu-active').textContent = cpu.active ? 'yes' : 'no';
+      document.getElementById('cpu-threads').textContent = cpu.threadCount ?? 0;
+      const ends = cpu.active ? cpu.expectedCompletionUtc : cpu.completedAtUtc;
+      document.getElementById('cpu-ends').textContent = ends ? formatDate(ends) : '–';
+    }
+
+    function updateMemory(data) {
+      const memory = (data.stress && data.stress.memory) || {};
+      document.getElementById('memory-active').textContent = memory.active ? 'yes' : 'no';
+      document.getElementById('memory-target').textContent = memory.targetMegabytes ?? 0;
+      const ends = memory.active ? memory.expectedCompletionUtc : memory.completedAtUtc;
+      document.getElementById('memory-ends').textContent = ends ? formatDate(ends) : '–';
+    }
+
+    async function postJson(url, payload) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const error = await safeReadJson(response);
+        const message = error?.message || `Request failed (${response.status})`;
+        throw new Error(message);
+      }
+
+      return safeReadJson(response);
+    }
+
+    async function deleteRequest(url) {
+      const response = await fetch(url, { method: 'DELETE' });
+      if (!response.ok) {
+        const error = await safeReadJson(response);
+        const message = error?.message || `Request failed (${response.status})`;
+        throw new Error(message);
+      }
+
+      return safeReadJson(response);
+    }
+
+    async function safeReadJson(response) {
+      try {
+        return await response.json();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function getMinutesInput(id) {
+      const value = parseFloat(document.getElementById(id).value);
+      if (!Number.isFinite(value) || value <= 0) {
+        throw new Error('Minutes must be a positive number.');
+      }
+      return value;
+    }
+
+    function bindProbeControls() {
+      document.querySelectorAll('#probes .probe').forEach(container => {
+        const probe = container.dataset.probe;
+        const minutesInput = document.getElementById(`input-${probe}-minutes`);
+
+        container.querySelectorAll('button').forEach(button => {
+          button.addEventListener('click', async () => {
+            try {
+              if (button.dataset.action === 'down') {
+                const minutes = getMinutesInput(minutesInput.id);
+                await postJson(`/api/probes/${probe}/down`, { minutes });
+                setNotification(`${probe} probe taken down for ${minutes} minute(s).`);
+              } else {
+                await postJson(`/api/probes/${probe}/up`, {});
+                setNotification(`${probe} probe restored.`);
+              }
+              await refreshStatus();
+            } catch (error) {
+              setNotification(error.message, true);
+            }
+          });
+        });
+      });
+    }
+
+    function bindStressControls() {
+      document.getElementById('cpu-start').addEventListener('click', async () => {
+        try {
+          const minutes = getMinutesInput('cpu-minutes');
+          const threads = parseInt(document.getElementById('cpu-threads-input').value, 10);
+          if (!Number.isFinite(threads) || threads <= 0) {
+            throw new Error('Threads must be a positive integer.');
+          }
+          await postJson('/api/stress/cpu', { minutes, threads });
+          setNotification(`CPU stress scheduled for ${minutes} minute(s) with ${threads} thread(s).`);
+          await refreshStatus();
+        } catch (error) {
+          setNotification(error.message, true);
+        }
+      });
+
+      document.getElementById('cpu-stop').addEventListener('click', async () => {
+        try {
+          await deleteRequest('/api/stress/cpu');
+          setNotification('CPU stress cancelled.');
+          await refreshStatus();
+        } catch (error) {
+          setNotification(error.message, true);
+        }
+      });
+
+      document.getElementById('memory-start').addEventListener('click', async () => {
+        try {
+          const minutes = getMinutesInput('memory-minutes');
+          const target = parseInt(document.getElementById('memory-target-input').value, 10);
+          if (!Number.isFinite(target) || target <= 0) {
+            throw new Error('Target megabytes must be greater than zero.');
+          }
+          await postJson('/api/stress/memory', { minutes, targetMegabytes: target });
+          setNotification(`Memory stress scheduled for ${minutes} minute(s) at ${target} MB.`);
+          await refreshStatus();
+        } catch (error) {
+          setNotification(error.message, true);
+        }
+      });
+
+      document.getElementById('memory-stop').addEventListener('click', async () => {
+        try {
+          await deleteRequest('/api/stress/memory');
+          setNotification('Memory stress cancelled.');
+          await refreshStatus();
+        } catch (error) {
+          setNotification(error.message, true);
+        }
+      });
+    }
+
+    function initializeInputs() {
+      const cores = navigator.hardwareConcurrency || 4;
+      document.getElementById('cpu-threads-input').value = Math.min(cores * 2, 16);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initializeInputs();
+      bindProbeControls();
+      bindStressControls();
+      refreshStatus();
+      setInterval(refreshStatus, 5000);
+    });
+  </script>
+</body>
+</html>

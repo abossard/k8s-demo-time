@@ -1,0 +1,13 @@
+bin/
+obj/
+**/bin/
+**/obj/
+**/.vs/
+**/.idea/
+.vscode/
+.git
+Dockerfile
+k8s/
+*.user
+*.suo
+*.csproj.user
