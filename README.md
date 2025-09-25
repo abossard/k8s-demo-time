@@ -130,5 +130,5 @@ flowchart TD
 - Hook the deployment into VPA/HPA demos using the built-in stress controls.
 - Add Cilium network policy examples alongside the existing manifests.
 - Extend the dashboard with custom scenarios relevant to your workshop.
-
+  
 Bonus idea: project the dashboard on a big screen and run pod bingos. First team to crash liveness wins a sticker pack 🏆.
