@@ -1,3 +1,4 @@
+using System.Globalization;
 using K8sDemoApp;
 using K8sDemoApp.Application.Common;
 using K8sDemoApp.Application.Status;
@@ -5,6 +6,8 @@ using K8sDemoApp.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace K8sDemoApp.Application.Probes;
 
@@ -14,7 +17,13 @@ internal static class ProbeModule
 
     public static IServiceCollection AddProbeModule(this IServiceCollection services)
     {
-        services.AddSingleton<IProbeScheduler, ProbeStateStore>();
+        services.AddSingleton<IProbeScheduler>(sp =>
+        {
+            var timeProvider = sp.GetRequiredService<TimeProvider>();
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var holdDuration = ParseStartupHold(configuration);
+            return new ProbeStateStore(timeProvider, holdDuration);
+        });
         return services;
     }
 
@@ -72,5 +81,31 @@ internal static class ProbeModule
     private static IResult WriteError(string message)
     {
         return Results.Json(new ApiError(message), AppJsonSerializerContext.Default.ApiError, statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    private static TimeSpan ParseStartupHold(IConfiguration configuration)
+    {
+        var value = configuration["HOLD_STARTUP_SECONDS"];
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return TimeSpan.Zero;
+        }
+
+        if (TryParseSeconds(value, out var seconds) && seconds > 0)
+        {
+            return TimeSpan.FromSeconds(seconds);
+        }
+
+        return TimeSpan.Zero;
+    }
+
+    private static bool TryParseSeconds(string value, out double seconds)
+    {
+        if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out seconds))
+        {
+            return true;
+        }
+
+        return double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out seconds);
     }
 }

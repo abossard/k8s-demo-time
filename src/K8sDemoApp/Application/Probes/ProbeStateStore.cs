@@ -18,10 +18,21 @@ internal sealed class ProbeStateStore : IProbeScheduler
     private readonly object _lock = new();
 
     public ProbeStateStore(TimeProvider timeProvider)
+        : this(timeProvider, TimeSpan.Zero)
+    {
+    }
+
+    public ProbeStateStore(TimeProvider timeProvider, TimeSpan startupHoldDuration)
     {
         _timeProvider = timeProvider;
         _states = Enum.GetValues<ProbeType>()
             .ToDictionary(static type => type, static type => new ProbeState(type));
+
+        if (startupHoldDuration > TimeSpan.Zero)
+        {
+            var holdUntil = _timeProvider.GetUtcNow().Add(startupHoldDuration);
+            _states[ProbeType.Startup].DownUntilUtc = holdUntil;
+        }
     }
 
     public ProbeInfoDto ScheduleDowntime(ProbeType type, TimeSpan duration)

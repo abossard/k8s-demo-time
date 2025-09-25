@@ -21,6 +21,8 @@ spec:
           env:
             - name: ASPNETCORE_URLS
               value: http://+:8080
+            - name: HOLD_STARTUP_SECONDS
+              value: "30"
           ports:
             - name: http
               containerPort: 8080

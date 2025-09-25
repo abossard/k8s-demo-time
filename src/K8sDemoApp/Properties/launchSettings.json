@@ -8,7 +8,8 @@
       "launchUrl": "/",
       "applicationUrl": "http://localhost:8080",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "HOLD_STARTUP_SECONDS": "60"
       }
     }
   }
