@@ -1,0 +1,11 @@
+@K8sDemoApp_HostAddress = http://localhost:5023
+
+GET {{K8sDemoApp_HostAddress}}/todos/
+Accept: application/json
+
+###
+
+GET {{K8sDemoApp_HostAddress}}/todos/1
+Accept: application/json
+
+###
