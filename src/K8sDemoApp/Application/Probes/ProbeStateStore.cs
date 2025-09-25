@@ -43,8 +43,9 @@ internal sealed class ProbeStateStore : IProbeScheduler
         {
             var now = _timeProvider.GetUtcNow();
             var until = now.Add(duration);
-            _states[type].DownUntilUtc = until;
-            return ToDto(type, until);
+            var state = _states[type];
+            state.DownUntilUtc = until;
+            return ToDto(state);
         }
     }
 
@@ -52,8 +53,9 @@ internal sealed class ProbeStateStore : IProbeScheduler
     {
         lock (_lock)
         {
-            _states[type].DownUntilUtc = null;
-            return ToDto(type, null);
+            var state = _states[type];
+            state.DownUntilUtc = null;
+            return ToDto(state);
         }
     }
 
@@ -63,6 +65,7 @@ internal sealed class ProbeStateStore : IProbeScheduler
         {
             var now = _timeProvider.GetUtcNow();
             var state = _states[type];
+            state.RegisterCall(now);
             if (state.DownUntilUtc is { } until && until <= now)
             {
                 state.DownUntilUtc = null;
@@ -92,12 +95,17 @@ internal sealed class ProbeStateStore : IProbeScheduler
             state.DownUntilUtc = null;
         }
 
-        return ToDto(type, state.DownUntilUtc);
+        return ToDto(state);
     }
 
-    private static ProbeInfoDto ToDto(ProbeType type, DateTimeOffset? downUntilUtc)
+    private static ProbeInfoDto ToDto(ProbeState state)
     {
-        return new ProbeInfoDto(ProbeRoute.ToSegment(type), downUntilUtc is null, downUntilUtc);
+        return new ProbeInfoDto(
+            ProbeRoute.ToSegment(state.Type),
+            state.DownUntilUtc is null,
+            state.DownUntilUtc,
+            state.CallCount,
+            state.LastCalledUtc);
     }
 
     private sealed class ProbeState
@@ -109,5 +117,13 @@ internal sealed class ProbeStateStore : IProbeScheduler
 
         public ProbeType Type { get; }
         public DateTimeOffset? DownUntilUtc { get; set; }
+        public long CallCount { get; private set; }
+        public DateTimeOffset? LastCalledUtc { get; private set; }
+
+        public void RegisterCall(DateTimeOffset now)
+        {
+            CallCount++;
+            LastCalledUtc = now;
+        }
     }
 }

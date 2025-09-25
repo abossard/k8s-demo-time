@@ -87,6 +87,14 @@
       color: rgba(226, 232, 240, 0.92);
     }
 
+    .probe-metrics {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      font-size: 0.8rem;
+      color: rgba(226, 232, 240, 0.6);
+    }
+
     .flex {
       display: flex;
       gap: 0.75rem;
@@ -274,6 +282,10 @@
             <span class="probe-name" title="Startup probe checks whether the container finished initializing before other probes run.">Startup Probe</span>
             <span class="status-chip" id="status-startup">–</span>
           </div>
+          <div class="probe-metrics">
+            <span id="metrics-startup-calls">Calls: 0</span>
+            <span id="metrics-startup-last">Last: –</span>
+          </div>
           <div class="flex">
             <label>Downtime minutes
               <input type="number" min="0.1" step="0.5" value="5" id="input-startup-minutes">
@@ -287,6 +299,10 @@
             <span class="probe-name" title="Readiness probe decides when the pod can start receiving traffic from the service.">Readiness Probe</span>
             <span class="status-chip" id="status-readiness">–</span>
           </div>
+          <div class="probe-metrics">
+            <span id="metrics-readiness-calls">Calls: 0</span>
+            <span id="metrics-readiness-last">Last: –</span>
+          </div>
           <div class="flex">
             <label>Downtime minutes
               <input type="number" min="0.1" step="0.5" value="5" id="input-readiness-minutes">
@@ -299,6 +315,10 @@
           <div class="probe-header">
             <span class="probe-name" title="Liveness probe tells Kubernetes when to restart the container because it is unhealthy.">Liveness Probe</span>
             <span class="status-chip" id="status-liveness">–</span>
+          </div>
+          <div class="probe-metrics">
+            <span id="metrics-liveness-calls">Calls: 0</span>
+            <span id="metrics-liveness-last">Last: –</span>
           </div>
           <div class="flex">
             <label>Downtime minutes
@@ -480,6 +500,8 @@
       ['startup', 'readiness', 'liveness'].forEach(name => {
         const info = probes[name];
         const el = document.getElementById(`status-${name}`);
+        const countEl = document.getElementById(`metrics-${name}-calls`);
+        const lastEl = document.getElementById(`metrics-${name}-last`);
         if (!el) {
           return;
         }
@@ -487,6 +509,12 @@
         if (!info) {
           el.className = 'status-chip down';
           el.textContent = 'Unknown';
+          if (countEl) {
+            countEl.textContent = 'Calls: –';
+          }
+          if (lastEl) {
+            lastEl.textContent = 'Last: –';
+          }
           return;
         }
 
@@ -497,6 +525,16 @@
           el.textContent = `Down until ${formatDate(info.downUntilUtc)}`;
         } else {
           el.textContent = 'Down';
+        }
+
+        if (countEl) {
+          const count = typeof info.callCount === 'number' && info.callCount >= 0 ? info.callCount : '–';
+          countEl.textContent = `Calls: ${count}`;
+        }
+
+        if (lastEl) {
+          const last = info.lastCalledUtc ? formatDate(info.lastCalledUtc) : '–';
+          lastEl.textContent = `Last: ${last}`;
         }
       });
     }
