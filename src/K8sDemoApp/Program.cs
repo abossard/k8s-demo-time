@@ -305,7 +305,9 @@ internal sealed class StressCoordinator
                 const int megabyte = 1024 * 1024;
                 for (var i = 0; i < megabytes; i++)
                 {
-                    blocks.Add(GC.AllocateUninitializedArray<byte>(megabyte));
+                    var buffer = GC.AllocateUninitializedArray<byte>(megabyte);
+                    TouchPages(buffer);
+                    blocks.Add(buffer);
                 }
             }
             catch (OutOfMemoryException)
@@ -456,6 +458,22 @@ internal sealed class StressCoordinator
                 value = 0;
             }
         }
+    }
+
+    private static void TouchPages(byte[] buffer)
+    {
+        if (buffer.Length == 0)
+        {
+            return;
+        }
+
+        const int pageSize = 4096;
+        for (var i = 0; i < buffer.Length; i += pageSize)
+        {
+            buffer[i] = 0x1;
+        }
+
+        buffer[^1] = 0x1;
     }
 
     private sealed class CpuRun
