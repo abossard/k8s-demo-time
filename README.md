@@ -62,8 +62,73 @@ kubectl port-forward svc/k8s-demo-app 8080:80
 
 Browse to <http://localhost:8080> to interact with a pod, toggle probes, and trigger stress workloads for autoscaling demos.
 
+## Mood Lighting for Pods 🎨
+
+Every replica gets its own vibe. When the dashboard loads a hostname it:
+
+1. Hashes the hostname into a 32‑bit integer (cheap DJ name generator).
+2. Takes the absolute value modulo 360 to pick an HSL hue.
+3. Derives a palette (primary, glow, surface, button) from that hue.
+4. Drops the palette into CSS variables so the gradients, buttons, and chips all match.
+
+Same hostname ⇒ same color, different pods ⇒ instant rainbow cluster. Watching a rolling update feels like a disco 🪩.
+
+## Architecture (Mermaid style 🐟)
+
+```mermaid
+flowchart TD
+    subgraph "Browser UI"
+        A[Static Dashboard]
+        B[EventSource /api/status/stream]
+        C[Action Buttons]
+    end
+
+    subgraph "API Core"
+        D[StatusModule]
+        E[ProbeModule]
+        F[StressModule]
+        G[StatusStream]
+        H[ProbeStateStore]
+        I[StressCoordinator]
+        S[Static Files]
+    end
+
+    subgraph "Workloads"
+        J[CPU threads]
+        K[Memory hog]
+    end
+
+    subgraph "Kubernetes Probes"
+        L[Startup Probe]
+        M[Readiness Probe]
+        N[Liveness Probe]
+    end
+
+    A -->|GET static assets| S
+    A -->|GET /api/status| D
+    B -->|SSE heartbeat + status| G
+    C -->|POST /api/probes/*| E
+    C -->|POST /api/stress/*| F
+
+    D -->|pull snapshot| G
+    G -->|push update| B
+    E -->|toggle state| H
+    F -->|spin workloads| I
+    H -->|publish change| G
+    I -->|publish change| G
+
+    I -->|start/stop| J
+    I -->|start/stop| K
+
+    H -->|report health| L
+    H -->|report health| M
+    H -->|report health| N
+```
+
 ## Next Steps
 
 - Hook the deployment into VPA/HPA demos using the built-in stress controls.
 - Add Cilium network policy examples alongside the existing manifests.
 - Extend the dashboard with custom scenarios relevant to your workshop.
+
+Bonus idea: project the dashboard on a big screen and run pod bingos. First team to crash liveness wins a sticker pack 🏆.
