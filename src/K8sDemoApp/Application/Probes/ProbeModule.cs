@@ -1,0 +1,73 @@
+using K8sDemoApp;
+using K8sDemoApp.Application.Common;
+using K8sDemoApp.Models;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+
+namespace K8sDemoApp.Application.Probes;
+
+internal static class ProbeModule
+{
+    private const double MaxDowntimeMinutes = 24 * 60;
+
+    public static IServiceCollection AddProbeModule(this IServiceCollection services)
+    {
+        services.AddSingleton<IProbeScheduler, ProbeStateStore>();
+        return services;
+    }
+
+    public static IEndpointRouteBuilder MapProbeModule(this IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapGet("/health/startup", (IProbeScheduler probes) => FormatHealth(probes, ProbeType.Startup));
+        endpoints.MapGet("/health/readiness", (IProbeScheduler probes) => FormatHealth(probes, ProbeType.Readiness));
+        endpoints.MapGet("/health/liveness", (IProbeScheduler probes) => FormatHealth(probes, ProbeType.Liveness));
+
+        var group = endpoints.MapGroup("/api/probes");
+        group.MapPost("/{probe}/down", HandleProbeDown);
+        group.MapPost("/{probe}/up", HandleProbeUp);
+
+        return endpoints;
+    }
+
+    private static IResult HandleProbeDown(string probe, ScheduleDowntimeRequest request, IProbeScheduler probes)
+    {
+        if (!ProbeRoute.TryParse(probe, out var probeType))
+        {
+            return WriteError($"Unknown probe '{probe}'.");
+        }
+
+        if (!RequestValidators.TryGetDurationInMinutes(request.Minutes, MaxDowntimeMinutes, out var duration, out var error))
+        {
+            return WriteError(error);
+        }
+
+        var snapshot = probes.ScheduleDowntime(probeType, duration);
+        return Results.Json(snapshot, AppJsonSerializerContext.Default.ProbeInfoDto);
+    }
+
+    private static IResult HandleProbeUp(string probe, IProbeScheduler probes)
+    {
+        if (!ProbeRoute.TryParse(probe, out var probeType))
+        {
+            return WriteError($"Unknown probe '{probe}'.");
+        }
+
+        var snapshot = probes.Restore(probeType);
+        return Results.Json(snapshot, AppJsonSerializerContext.Default.ProbeInfoDto);
+    }
+
+    private static IResult FormatHealth(IProbeScheduler probes, ProbeType type)
+    {
+        var healthy = probes.IsHealthy(type);
+        var payload = new HealthPayload(healthy ? "ok" : "down");
+        return healthy
+            ? Results.Json(payload, AppJsonSerializerContext.Default.HealthPayload)
+            : Results.Json(payload, AppJsonSerializerContext.Default.HealthPayload, statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    private static IResult WriteError(string message)
+    {
+        return Results.Json(new ApiError(message), AppJsonSerializerContext.Default.ApiError, statusCode: StatusCodes.Status400BadRequest);
+    }
+}

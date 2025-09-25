@@ -1,8 +1,10 @@
 using System.Text.Json.Serialization;
+using K8sDemoApp.Application.Common;
 using K8sDemoApp.Models;
 
 namespace K8sDemoApp;
 
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(InstanceStatusResponse))]
 [JsonSerializable(typeof(ProbeSnapshot))]
 [JsonSerializable(typeof(ProbeInfoDto))]
@@ -13,5 +15,5 @@ namespace K8sDemoApp;
 [JsonSerializable(typeof(StressMemoryRequest))]
 [JsonSerializable(typeof(ApiError))]
 [JsonSerializable(typeof(ApiMessage))]
-[JsonSerializable(typeof(global::HealthPayload))]
+[JsonSerializable(typeof(HealthPayload))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext;
