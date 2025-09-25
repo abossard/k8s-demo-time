@@ -8,8 +8,17 @@
     :root {
       color-scheme: light dark;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background-color: #1f2933;
       color: #f1f5f9;
+      --host-color-primary: #38bdf8;
+      --host-color-glow: rgba(56, 189, 248, 0.3);
+      --host-color-surface: rgba(15, 23, 42, 0.82);
+      --host-color-border: rgba(148, 163, 184, 0.25);
+      --host-color-dark: #0f172a;
+      --host-color-darker: #0b1120;
+      --host-color-chip: rgba(56, 189, 248, 0.18);
+      --host-color-chip-border: rgba(56, 189, 248, 0.4);
+      --host-color-button: #3b82f6;
+      --host-color-button-hover: #60a5fa;
     }
 
     body {
@@ -17,7 +26,12 @@
       padding: 1.5rem;
       display: grid;
       gap: 1.5rem;
-      background: linear-gradient(180deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 20% -10%, var(--host-color-glow), transparent 55%),
+        radial-gradient(circle at 80% -20%, rgba(248, 250, 252, 0.08), transparent 45%),
+        linear-gradient(180deg, var(--host-color-dark), var(--host-color-darker));
+      transition: background 250ms ease;
     }
 
     main {
@@ -29,15 +43,20 @@
 
     header h1 {
       margin: 0;
-      font-size: 1.875rem;
+      font-size: clamp(2rem, 4vw, 2.75rem);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--host-color-primary);
+      text-shadow: 0 0 25px var(--host-color-glow);
     }
 
     section {
-      background: rgba(15, 23, 42, 0.8);
-      padding: 1.25rem;
-      border-radius: 0.75rem;
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.9);
+      background: var(--host-color-surface);
+      padding: 1.35rem;
+      border-radius: 0.85rem;
+      border: 1px solid var(--host-color-border);
+      box-shadow: 0 25px 50px -18px var(--host-color-glow);
+      backdrop-filter: blur(14px);
     }
 
     h2 {
@@ -74,39 +93,40 @@
       padding: 0.4rem 0.6rem;
       border-radius: 0.4rem;
       border: 1px solid rgba(148, 163, 184, 0.3);
-      background: rgba(15, 23, 42, 0.6);
+      background: rgba(8, 15, 30, 0.65);
       color: inherit;
       width: 6rem;
     }
 
     button {
       padding: 0.45rem 0.85rem;
-      border-radius: 0.5rem;
+      border-radius: 0.55rem;
       border: 1px solid transparent;
-      background: #3b82f6;
+      background: var(--host-color-button);
       color: #fff;
       font-weight: 600;
       cursor: pointer;
-      transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
+      transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.15s ease;
     }
 
     button.secondary {
-      background: rgba(148, 163, 184, 0.25);
+      background: rgba(148, 163, 184, 0.18);
       color: inherit;
     }
 
     button:hover {
       transform: translateY(-1px);
-      box-shadow: 0 10px 15px -8px rgba(59, 130, 246, 0.5);
+      background: var(--host-color-button-hover);
+      box-shadow: 0 10px 20px -12px var(--host-color-glow);
     }
 
     .status-card {
       display: grid;
-      gap: 0.5rem;
-      padding: 0.75rem;
-      border-radius: 0.5rem;
-      background: rgba(30, 41, 59, 0.7);
-      border: 1px solid rgba(148, 163, 184, 0.2);
+      gap: 0.75rem;
+      padding: 1rem;
+      border-radius: 0.65rem;
+      background: rgba(9, 16, 30, 0.65);
+      border: 1px solid var(--host-color-border);
     }
 
     .status-chip {
@@ -117,12 +137,13 @@
       border-radius: 9999px;
       font-size: 0.85rem;
       font-weight: 600;
+      border: 1px solid transparent;
     }
 
     .status-chip.up {
-      background: rgba(34, 197, 94, 0.2);
-      color: #86efac;
-      border: 1px solid rgba(34, 197, 94, 0.3);
+      background: var(--host-color-chip);
+      color: var(--host-color-button-hover);
+      border-color: var(--host-color-chip-border);
     }
 
     .status-chip.down {
@@ -134,6 +155,56 @@
     #notifications {
       min-height: 1.2rem;
       font-size: 0.95rem;
+    }
+
+    .instance-card {
+      gap: 1rem;
+    }
+
+    .host-banner {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .host-label {
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      font-size: 0.75rem;
+      color: rgba(226, 232, 240, 0.7);
+    }
+
+    #hostname {
+      display: block;
+      font-size: clamp(2.5rem, 7vw, 4.5rem);
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      color: var(--host-color-primary);
+      text-shadow: 0 0 55px var(--host-color-glow);
+      word-break: break-word;
+    }
+
+    .meta-grid {
+      display: grid;
+      gap: 0.85rem;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    }
+
+    .meta-item {
+      display: grid;
+      gap: 0.2rem;
+    }
+
+    .meta-label {
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 0.7rem;
+      color: rgba(226, 232, 240, 0.6);
+    }
+
+    .meta-value {
+      font-size: 1.05rem;
+      font-weight: 600;
     }
 
     @media (max-width: 640px) {
@@ -161,11 +232,25 @@
 
     <section id="instance">
       <h2>Instance</h2>
-      <div class="status-card">
-        <div><strong>Hostname:</strong> <span id="hostname">–</span></div>
-        <div><strong>Started:</strong> <span id="started">–</span></div>
-        <div><strong>Uptime:</strong> <span id="uptime">–</span></div>
-        <div><strong>Last Updated:</strong> <span id="last-updated">–</span></div>
+      <div class="status-card instance-card">
+        <div class="host-banner">
+          <span class="host-label">Hostname</span>
+          <span id="hostname">–</span>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">Started</span>
+            <span class="meta-value" id="started">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Uptime</span>
+            <span class="meta-value" id="uptime">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Last Updated</span>
+            <span class="meta-value" id="last-updated">–</span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -264,6 +349,8 @@
       }
     }
 
+    let currentHostKey = null;
+
     function setNotification(message, isError = false) {
       if (!message) {
         notificationEl.textContent = '';
@@ -310,6 +397,47 @@
       }
 
       return '–';
+    }
+
+    function applyHostTheme(hostname) {
+      if (!hostname || hostname === currentHostKey) {
+        return;
+      }
+
+      currentHostKey = hostname;
+      const hue = computeHostHue(hostname);
+      const primary = `hsl(${hue} 78% 58%)`;
+      const glow = `hsla(${hue} 90% 65% / 0.35)`;
+      const surface = `hsla(${hue} 38% 18% / 0.82)`;
+      const border = `hsla(${hue} 40% 65% / 0.28)`;
+      const dark = `hsl(${hue} 58% 11%)`;
+      const darker = `hsl(${hue} 60% 7%)`;
+      const chip = `hsla(${hue} 85% 62% / 0.22)`;
+      const chipBorder = `hsla(${hue} 85% 68% / 0.48)`;
+      const button = `hsl(${hue} 80% 55%)`;
+      const buttonHover = `hsl(${hue} 86% 60%)`;
+
+      const root = document.documentElement.style;
+      root.setProperty('--host-color-primary', primary);
+      root.setProperty('--host-color-glow', glow);
+      root.setProperty('--host-color-surface', surface);
+      root.setProperty('--host-color-border', border);
+      root.setProperty('--host-color-dark', dark);
+      root.setProperty('--host-color-darker', darker);
+      root.setProperty('--host-color-chip', chip);
+      root.setProperty('--host-color-chip-border', chipBorder);
+      root.setProperty('--host-color-button', button);
+      root.setProperty('--host-color-button-hover', buttonHover);
+      logEvent('info', 'Theme updated for host', { hostname, hue });
+    }
+
+    function computeHostHue(hostname) {
+      let hash = 0;
+      for (let i = 0; i < hostname.length; i++) {
+        hash = (hash << 5) - hash + hostname.charCodeAt(i);
+        hash |= 0;
+      }
+      return Math.abs(hash) % 360;
     }
 
     function updateInstance(data) {
@@ -493,6 +621,7 @@
     let reconnectTimer;
 
     function applyStatus(data) {
+      applyHostTheme(data.hostname);
       updateInstance(data);
       updateProbes(data);
       updateCpu(data);
