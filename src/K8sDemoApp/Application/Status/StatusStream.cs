@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Channels;
+using K8sDemoApp.Application.Stress;
 using K8sDemoApp.Models;
 
 namespace K8sDemoApp.Application.Status;
@@ -16,15 +17,13 @@ internal sealed class StatusStream : IStatusStream
 {
     private readonly StatusService _statusService;
     private readonly ConcurrentDictionary<long, Channel<InstanceStatusResponse>> _subscribers = new();
-    private readonly PeriodicTimer _timer;
     private readonly object _publishLock = new();
     private long _nextId;
 
-    public StatusStream(StatusService statusService)
+    public StatusStream(StatusService statusService, IStressSupervisor stressSupervisor)
     {
         _statusService = statusService;
-        _timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
-        _ = RunTickerAsync();
+        stressSupervisor.StatusChanged += OnStatusChanged;
     }
 
     public IAsyncEnumerable<InstanceStatusResponse> SubscribeAsync(CancellationToken cancellationToken)
@@ -53,20 +52,6 @@ internal sealed class StatusStream : IStatusStream
         }
     }
 
-    private async Task RunTickerAsync()
-    {
-        try
-        {
-            while (await _timer.WaitForNextTickAsync())
-            {
-                Publish();
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-    }
-
     private void BroadcastSnapshot()
     {
         if (_subscribers.IsEmpty)
@@ -83,6 +68,11 @@ internal sealed class StatusStream : IStatusStream
                 RemoveSubscriber(entry.Key);
             }
         }
+    }
+
+    private void OnStatusChanged()
+    {
+        Publish();
     }
 
     private void RemoveSubscriber(long id)

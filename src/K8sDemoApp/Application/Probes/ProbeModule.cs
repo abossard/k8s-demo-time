@@ -29,9 +29,9 @@ internal static class ProbeModule
 
     public static IEndpointRouteBuilder MapProbeModule(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/health/startup", (IProbeScheduler probes) => FormatHealth(probes, ProbeType.Startup));
-        endpoints.MapGet("/health/readiness", (IProbeScheduler probes) => FormatHealth(probes, ProbeType.Readiness));
-        endpoints.MapGet("/health/liveness", (IProbeScheduler probes) => FormatHealth(probes, ProbeType.Liveness));
+        endpoints.MapGet("/health/startup", (IProbeScheduler probes, IStatusStream statusStream) => FormatHealth(probes, statusStream, ProbeType.Startup));
+        endpoints.MapGet("/health/readiness", (IProbeScheduler probes, IStatusStream statusStream) => FormatHealth(probes, statusStream, ProbeType.Readiness));
+        endpoints.MapGet("/health/liveness", (IProbeScheduler probes, IStatusStream statusStream) => FormatHealth(probes, statusStream, ProbeType.Liveness));
 
         var group = endpoints.MapGroup("/api/probes");
         group.MapPost("/{probe}/down", HandleProbeDown);
@@ -69,9 +69,10 @@ internal static class ProbeModule
         return Results.Json(snapshot, AppJsonSerializerContext.Default.ProbeInfoDto);
     }
 
-    private static IResult FormatHealth(IProbeScheduler probes, ProbeType type)
+    private static IResult FormatHealth(IProbeScheduler probes, IStatusStream statusStream, ProbeType type)
     {
         var healthy = probes.IsHealthy(type);
+        statusStream.Publish();
         var payload = new HealthPayload(healthy ? "ok" : "down");
         return healthy
             ? Results.Json(payload, AppJsonSerializerContext.Default.HealthPayload)

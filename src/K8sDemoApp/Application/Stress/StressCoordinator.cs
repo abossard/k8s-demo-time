@@ -8,6 +8,7 @@ using K8sDemoApp.Models;
 
 internal interface IStressSupervisor
 {
+    event Action StatusChanged;
     StressStartResult StartCpuStress(TimeSpan duration, int threads);
     StressWorkloadStatus CancelCpuStress();
     StressStartResult StartMemoryStress(TimeSpan duration, int megabytes);
@@ -23,6 +24,8 @@ internal sealed class StressCoordinator : IStressSupervisor
     private MemoryRun? _memoryRun;
     private StressWorkloadStatus _cpuSnapshot = new("cpu", false, null, null, null, null, null, null);
     private StressWorkloadStatus _memorySnapshot = new("memory", false, null, null, null, null, null, null);
+
+    public event Action? StatusChanged;
 
     public StressCoordinator(TimeProvider timeProvider)
     {
@@ -41,9 +44,11 @@ internal sealed class StressCoordinator : IStressSupervisor
             return StressStartResult.Failure("Duration must be greater than zero.", _cpuSnapshot);
         }
 
+        var notify = false;
+        StressStartResult result;
         lock (_lock)
         {
-            StopCpuLocked(null);
+            notify |= StopCpuLocked(null);
 
             var now = _timeProvider.GetUtcNow();
             var expected = now.Add(duration);
@@ -60,17 +65,34 @@ internal sealed class StressCoordinator : IStressSupervisor
             _cpuRun = run;
             _cpuSnapshot = new StressWorkloadStatus("cpu", true, now, expected, null, threads, null, null);
             _ = MonitorCpuAsync(run, duration);
-            return StressStartResult.Successful(_cpuSnapshot);
+            notify = true;
+            result = StressStartResult.Successful(_cpuSnapshot);
         }
+
+        if (notify)
+        {
+            OnStatusChanged();
+        }
+
+        return result;
     }
 
     public StressWorkloadStatus CancelCpuStress()
     {
+        var notify = false;
+        StressWorkloadStatus snapshot;
         lock (_lock)
         {
-            StopCpuLocked(null);
-            return _cpuSnapshot;
+            notify = StopCpuLocked(null);
+            snapshot = _cpuSnapshot;
         }
+
+        if (notify)
+        {
+            OnStatusChanged();
+        }
+
+        return snapshot;
     }
 
     public StressStartResult StartMemoryStress(TimeSpan duration, int megabytes)
@@ -85,9 +107,11 @@ internal sealed class StressCoordinator : IStressSupervisor
             return StressStartResult.Failure("Duration must be greater than zero.", _memorySnapshot);
         }
 
+        var notify = false;
+        StressStartResult result;
         lock (_lock)
         {
-            StopMemoryLocked(null);
+            notify |= StopMemoryLocked(null);
 
             var blocks = new List<byte[]>(megabytes);
             try
@@ -114,17 +138,34 @@ internal sealed class StressCoordinator : IStressSupervisor
             _memoryRun = run;
             _memorySnapshot = new StressWorkloadStatus("memory", true, now, expected, null, null, megabytes, null);
             _ = MonitorMemoryAsync(run, duration);
-            return StressStartResult.Successful(_memorySnapshot);
+            notify = true;
+            result = StressStartResult.Successful(_memorySnapshot);
         }
+
+        if (notify)
+        {
+            OnStatusChanged();
+        }
+
+        return result;
     }
 
     public StressWorkloadStatus CancelMemoryStress()
     {
+        var notify = false;
+        StressWorkloadStatus snapshot;
         lock (_lock)
         {
-            StopMemoryLocked(null);
-            return _memorySnapshot;
+            notify = StopMemoryLocked(null);
+            snapshot = _memorySnapshot;
         }
+
+        if (notify)
+        {
+            OnStatusChanged();
+        }
+
+        return snapshot;
     }
 
     public StressSnapshot GetSnapshot()
@@ -146,12 +187,18 @@ internal sealed class StressCoordinator : IStressSupervisor
         }
         finally
         {
+            var notify = false;
             lock (_lock)
             {
                 if (ReferenceEquals(_cpuRun, run))
                 {
-                    StopCpuLocked(null);
+                    notify = StopCpuLocked(null);
                 }
+            }
+
+            if (notify)
+            {
+                OnStatusChanged();
             }
         }
     }
@@ -167,18 +214,25 @@ internal sealed class StressCoordinator : IStressSupervisor
         }
         finally
         {
+            var notify = false;
             lock (_lock)
             {
                 if (ReferenceEquals(_memoryRun, run))
                 {
-                    StopMemoryLocked(null);
+                    notify = StopMemoryLocked(null);
                 }
+            }
+
+            if (notify)
+            {
+                OnStatusChanged();
             }
         }
     }
 
-    private void StopCpuLocked(string? error)
+    private bool StopCpuLocked(string? error)
     {
+        var changed = false;
         if (_cpuRun is not { } run)
         {
             if (!string.IsNullOrEmpty(error))
@@ -189,8 +243,9 @@ internal sealed class StressCoordinator : IStressSupervisor
                     CompletedAtUtc = _timeProvider.GetUtcNow(),
                     Active = false,
                 };
+                changed = true;
             }
-            return;
+            return changed;
         }
 
         _cpuRun = null;
@@ -214,10 +269,12 @@ internal sealed class StressCoordinator : IStressSupervisor
                 run.Cancellation.Dispose();
             }
         });
+        return true;
     }
 
-    private void StopMemoryLocked(string? error)
+    private bool StopMemoryLocked(string? error)
     {
+        var changed = false;
         if (_memoryRun is not { } run)
         {
             if (!string.IsNullOrEmpty(error))
@@ -228,8 +285,9 @@ internal sealed class StressCoordinator : IStressSupervisor
                     CompletedAtUtc = _timeProvider.GetUtcNow(),
                     Active = false,
                 };
+                changed = true;
             }
-            return;
+            return changed;
         }
 
         _memoryRun = null;
@@ -239,6 +297,12 @@ internal sealed class StressCoordinator : IStressSupervisor
         var completed = _timeProvider.GetUtcNow();
         _memorySnapshot = new StressWorkloadStatus("memory", false, run.StartedAtUtc, run.ExpectedCompletionUtc, completed, null, run.TargetMegabytes, error);
         run.Cancellation.Dispose();
+        return true;
+    }
+
+    private void OnStatusChanged()
+    {
+        StatusChanged?.Invoke();
     }
 
     private static void CpuWorker(CancellationToken token)
