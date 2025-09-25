@@ -246,6 +246,23 @@
 
   <script>
     const notificationEl = document.getElementById('notifications');
+    const logStyles = {
+      info: 'color:#38bdf8;font-weight:600;',
+      success: 'color:#34d399;font-weight:600;',
+      warn: 'color:#fbbf24;font-weight:600;',
+      error: 'color:#f87171;font-weight:600;'
+    };
+
+    function logEvent(level, message, details) {
+      const style = logStyles[level] ?? logStyles.info;
+      const prefix = '%c[K8sDemo]';
+      const logger = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
+      if (details !== undefined) {
+        logger(prefix, style, message, details);
+      } else {
+        logger(prefix, style, message);
+      }
+    }
 
     function setNotification(message, isError = false) {
       if (!message) {
@@ -256,6 +273,7 @@
 
       notificationEl.textContent = message;
       notificationEl.style.color = isError ? '#f87171' : '#86efac';
+      logEvent(isError ? 'error' : 'success', message);
     }
 
     function formatDate(value) {
@@ -298,7 +316,14 @@
       document.getElementById('hostname').textContent = data.hostname ?? '–';
       document.getElementById('started').textContent = formatDate(data.startedAtUtc);
       document.getElementById('uptime').textContent = formatDuration(data.uptime);
-      document.getElementById('last-updated').textContent = formatDate(data.currentTimeUtc);
+      const sequence = typeof data.sequence === 'number' ? ` #${data.sequence}` : '';
+      document.getElementById('last-updated').textContent = `${new Date().toLocaleTimeString()}${sequence}`;
+      if (typeof data.sequence === 'number') {
+        logEvent('info', `Status heartbeat received (seq ${data.sequence})`, {
+          hostname: data.hostname,
+          uptime: formatDuration(data.uptime)
+        });
+      }
     }
 
     function updateProbes(data) {
@@ -398,9 +423,11 @@
                 const minutes = getMinutesInput(minutesInput.id);
                 await postJson(`/api/probes/${probe}/down`, { minutes });
                 setNotification(`${probe} probe taken down for ${minutes} minute(s).`);
+                logEvent('warn', `${probe} probe scheduled down`, { minutes });
               } else {
                 await postJson(`/api/probes/${probe}/up`, {});
                 setNotification(`${probe} probe restored.`);
+                logEvent('success', `${probe} probe restored`);
               }
             } catch (error) {
               setNotification(error.message, true);
@@ -420,6 +447,7 @@
           }
           await postJson('/api/stress/cpu', { minutes, threads });
           setNotification(`CPU stress scheduled for ${minutes} minute(s) with ${threads} thread(s).`);
+          logEvent('warn', 'CPU stress scheduled', { minutes, threads });
         } catch (error) {
           setNotification(error.message, true);
         }
@@ -429,6 +457,7 @@
         try {
           await deleteRequest('/api/stress/cpu');
           setNotification('CPU stress cancelled.');
+          logEvent('success', 'CPU stress cancelled');
         } catch (error) {
           setNotification(error.message, true);
         }
@@ -443,6 +472,7 @@
           }
           await postJson('/api/stress/memory', { minutes, targetMegabytes: target });
           setNotification(`Memory stress scheduled for ${minutes} minute(s) at ${target} MB.`);
+          logEvent('warn', 'Memory stress scheduled', { minutes, targetMegabytes: target });
         } catch (error) {
           setNotification(error.message, true);
         }
@@ -452,6 +482,7 @@
         try {
           await deleteRequest('/api/stress/memory');
           setNotification('Memory stress cancelled.');
+          logEvent('success', 'Memory stress cancelled');
         } catch (error) {
           setNotification(error.message, true);
         }
@@ -478,18 +509,25 @@
 
       eventSource = new EventSource('/api/status/stream');
 
+      eventSource.onopen = () => {
+        setNotification('Connected', false);
+        logEvent('success', 'Connected to status stream');
+      };
+
       eventSource.onmessage = event => {
         try {
           const data = JSON.parse(event.data);
           applyStatus(data);
         } catch (error) {
           setNotification(`Failed to parse status update: ${error.message}`, true);
+          logEvent('error', 'Status payload parse failed', { raw: event.data });
         }
       };
 
       eventSource.onerror = () => {
         eventSource.close();
         setNotification('Connection lost. Reconnecting…', true);
+        logEvent('warn', 'Status stream disconnected, retrying in 3s');
         reconnectTimer = setTimeout(connectStream, 3000);
       };
     }
@@ -500,6 +538,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+      logEvent('info', 'Bootstrapping dashboard');
       initializeInputs();
       bindProbeControls();
       bindStressControls();

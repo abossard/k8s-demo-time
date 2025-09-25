@@ -59,11 +59,6 @@ internal sealed class StatusStream : IStatusStream
         {
             while (await _timer.WaitForNextTickAsync())
             {
-                if (_subscribers.IsEmpty)
-                {
-                    continue;
-                }
-
                 Publish();
             }
         }
@@ -74,6 +69,11 @@ internal sealed class StatusStream : IStatusStream
 
     private void BroadcastSnapshot()
     {
+        if (_subscribers.IsEmpty)
+        {
+            return;
+        }
+
         var snapshot = _statusService.GetStatus();
         foreach (var entry in _subscribers)
         {
