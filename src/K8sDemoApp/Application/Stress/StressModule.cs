@@ -1,5 +1,6 @@
 using K8sDemoApp;
 using K8sDemoApp.Application.Common;
+using K8sDemoApp.Application.Status;
 using K8sDemoApp.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -28,7 +29,7 @@ internal static class StressModule
         return endpoints;
     }
 
-    private static IResult HandleCpuStart(StressCpuRequest request, IStressSupervisor stress)
+    private static IResult HandleCpuStart(StressCpuRequest request, IStressSupervisor stress, IStatusStream statusStream)
     {
         if (!RequestValidators.TryGetDurationInMinutes(request.Minutes, MaxStressMinutes, out var duration, out var error))
         {
@@ -41,18 +42,23 @@ internal static class StressModule
         }
 
         var result = stress.StartCpuStress(duration, threads);
-        return result.Success
-            ? Results.Json(result.Status, AppJsonSerializerContext.Default.StressWorkloadStatus)
-            : WriteError(result.Error ?? "Unable to start CPU workload.");
+        if (result.Success)
+        {
+            statusStream.Publish();
+            return Results.Json(result.Status, AppJsonSerializerContext.Default.StressWorkloadStatus);
+        }
+
+        return WriteError(result.Error ?? "Unable to start CPU workload.");
     }
 
-    private static IResult HandleCpuStop(IStressSupervisor stress)
+    private static IResult HandleCpuStop(IStressSupervisor stress, IStatusStream statusStream)
     {
         var snapshot = stress.CancelCpuStress();
+        statusStream.Publish();
         return Results.Json(snapshot, AppJsonSerializerContext.Default.StressWorkloadStatus);
     }
 
-    private static IResult HandleMemoryStart(StressMemoryRequest request, IStressSupervisor stress)
+    private static IResult HandleMemoryStart(StressMemoryRequest request, IStressSupervisor stress, IStatusStream statusStream)
     {
         if (!RequestValidators.TryGetDurationInMinutes(request.Minutes, MaxStressMinutes, out var duration, out var error))
         {
@@ -65,14 +71,19 @@ internal static class StressModule
         }
 
         var result = stress.StartMemoryStress(duration, target);
-        return result.Success
-            ? Results.Json(result.Status, AppJsonSerializerContext.Default.StressWorkloadStatus)
-            : WriteError(result.Error ?? "Unable to start memory workload.");
+        if (result.Success)
+        {
+            statusStream.Publish();
+            return Results.Json(result.Status, AppJsonSerializerContext.Default.StressWorkloadStatus);
+        }
+
+        return WriteError(result.Error ?? "Unable to start memory workload.");
     }
 
-    private static IResult HandleMemoryStop(IStressSupervisor stress)
+    private static IResult HandleMemoryStop(IStressSupervisor stress, IStatusStream statusStream)
     {
         var snapshot = stress.CancelMemoryStress();
+        statusStream.Publish();
         return Results.Json(snapshot, AppJsonSerializerContext.Default.StressWorkloadStatus);
     }
 

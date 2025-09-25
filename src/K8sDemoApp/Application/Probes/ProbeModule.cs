@@ -1,5 +1,6 @@
 using K8sDemoApp;
 using K8sDemoApp.Application.Common;
+using K8sDemoApp.Application.Status;
 using K8sDemoApp.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -30,7 +31,7 @@ internal static class ProbeModule
         return endpoints;
     }
 
-    private static IResult HandleProbeDown(string probe, ScheduleDowntimeRequest request, IProbeScheduler probes)
+    private static IResult HandleProbeDown(string probe, ScheduleDowntimeRequest request, IProbeScheduler probes, IStatusStream statusStream)
     {
         if (!ProbeRoute.TryParse(probe, out var probeType))
         {
@@ -43,10 +44,11 @@ internal static class ProbeModule
         }
 
         var snapshot = probes.ScheduleDowntime(probeType, duration);
+        statusStream.Publish();
         return Results.Json(snapshot, AppJsonSerializerContext.Default.ProbeInfoDto);
     }
 
-    private static IResult HandleProbeUp(string probe, IProbeScheduler probes)
+    private static IResult HandleProbeUp(string probe, IProbeScheduler probes, IStatusStream statusStream)
     {
         if (!ProbeRoute.TryParse(probe, out var probeType))
         {
@@ -54,6 +56,7 @@ internal static class ProbeModule
         }
 
         var snapshot = probes.Restore(probeType);
+        statusStream.Publish();
         return Results.Json(snapshot, AppJsonSerializerContext.Default.ProbeInfoDto);
     }
 

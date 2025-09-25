@@ -294,23 +294,6 @@
       return '–';
     }
 
-    async function refreshStatus() {
-      try {
-        const response = await fetch('/api/status', { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`Status ${response.status}`);
-        }
-        const data = await response.json();
-        updateInstance(data);
-        updateProbes(data);
-        updateCpu(data);
-        updateMemory(data);
-        setNotification('');
-      } catch (error) {
-        setNotification(`Failed to load status: ${error.message}`, true);
-      }
-    }
-
     function updateInstance(data) {
       document.getElementById('hostname').textContent = data.hostname ?? '–';
       document.getElementById('started').textContent = formatDate(data.startedAtUtc);
@@ -419,7 +402,6 @@
                 await postJson(`/api/probes/${probe}/up`, {});
                 setNotification(`${probe} probe restored.`);
               }
-              await refreshStatus();
             } catch (error) {
               setNotification(error.message, true);
             }
@@ -438,7 +420,6 @@
           }
           await postJson('/api/stress/cpu', { minutes, threads });
           setNotification(`CPU stress scheduled for ${minutes} minute(s) with ${threads} thread(s).`);
-          await refreshStatus();
         } catch (error) {
           setNotification(error.message, true);
         }
@@ -448,7 +429,6 @@
         try {
           await deleteRequest('/api/stress/cpu');
           setNotification('CPU stress cancelled.');
-          await refreshStatus();
         } catch (error) {
           setNotification(error.message, true);
         }
@@ -463,7 +443,6 @@
           }
           await postJson('/api/stress/memory', { minutes, targetMegabytes: target });
           setNotification(`Memory stress scheduled for ${minutes} minute(s) at ${target} MB.`);
-          await refreshStatus();
         } catch (error) {
           setNotification(error.message, true);
         }
@@ -473,11 +452,46 @@
         try {
           await deleteRequest('/api/stress/memory');
           setNotification('Memory stress cancelled.');
-          await refreshStatus();
         } catch (error) {
           setNotification(error.message, true);
         }
       });
+    }
+
+    let eventSource;
+    let reconnectTimer;
+
+    function applyStatus(data) {
+      updateInstance(data);
+      updateProbes(data);
+      updateCpu(data);
+      updateMemory(data);
+      setNotification('');
+    }
+
+    function connectStream() {
+      clearTimeout(reconnectTimer);
+
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      eventSource = new EventSource('/api/status/stream');
+
+      eventSource.onmessage = event => {
+        try {
+          const data = JSON.parse(event.data);
+          applyStatus(data);
+        } catch (error) {
+          setNotification(`Failed to parse status update: ${error.message}`, true);
+        }
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        setNotification('Connection lost. Reconnecting…', true);
+        reconnectTimer = setTimeout(connectStream, 3000);
+      };
     }
 
     function initializeInputs() {
@@ -489,8 +503,7 @@
       initializeInputs();
       bindProbeControls();
       bindStressControls();
-      refreshStatus();
-      setInterval(refreshStatus, 5000);
+      connectStream();
     });
   </script>
 </body>
