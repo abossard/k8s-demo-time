@@ -134,10 +134,22 @@
       color: inherit;
     }
 
+    button.ghost {
+      background: transparent;
+      color: rgba(226, 232, 240, 0.7);
+      border-color: var(--host-color-border);
+    }
+
     button:hover {
       transform: translateY(-1px);
       background: var(--host-color-button-hover);
       box-shadow: 0 10px 20px -12px var(--host-color-glow);
+    }
+
+    button.ghost:hover {
+      background: rgba(148, 163, 184, 0.16);
+      color: var(--host-color-primary);
+      box-shadow: none;
     }
 
     .status-card {
@@ -292,6 +304,7 @@
             </label>
             <button data-action="down">Take Down</button>
             <button data-action="up" class="secondary">Restore</button>
+            <button data-action="ping" class="ghost" type="button">Ping</button>
           </div>
         </div>
         <div class="probe" data-probe="readiness">
@@ -309,6 +322,7 @@
             </label>
             <button data-action="down">Take Down</button>
             <button data-action="up" class="secondary">Restore</button>
+            <button data-action="ping" class="ghost" type="button">Ping</button>
           </div>
         </div>
         <div class="probe" data-probe="liveness">
@@ -326,6 +340,7 @@
             </label>
             <button data-action="down">Take Down</button>
             <button data-action="up" class="secondary">Restore</button>
+            <button data-action="ping" class="ghost" type="button">Ping</button>
           </div>
         </div>
       </div>
@@ -438,6 +453,13 @@
       }
 
       return '–';
+    }
+
+    function formatProbeLabel(probe) {
+      if (!probe) {
+        return 'Probe';
+      }
+      return probe.charAt(0).toUpperCase() + probe.slice(1);
     }
 
     function applyHostTheme(hostname) {
@@ -590,6 +612,30 @@
       }
     }
 
+    async function pingProbe(probe) {
+      const label = formatProbeLabel(probe);
+      try {
+        const response = await fetch(`/health/${probe}`);
+        const payload = await safeReadJson(response);
+        const rawStatus = typeof payload?.status === 'string' ? payload.status.toLowerCase() : null;
+        const healthy = response.ok && rawStatus === 'ok';
+        const friendly = healthy
+          ? 'healthy'
+          : rawStatus === 'down'
+            ? 'unhealthy'
+            : rawStatus ?? `status ${response.status}`;
+        const message = `${label} probe responded ${friendly}.`;
+        setNotification(message, !healthy);
+        logEvent(healthy ? 'success' : 'warn', `${label} probe ping`, {
+          statusCode: response.status,
+          payload
+        });
+      } catch (error) {
+        setNotification(`Failed to call ${label.toLowerCase()} probe: ${error.message}`, true);
+        logEvent('error', `${label} probe ping failed`, { error: error.message });
+      }
+    }
+
     function getMinutesInput(id) {
       const value = parseFloat(document.getElementById(id).value);
       if (!Number.isFinite(value) || value <= 0) {
@@ -602,18 +648,24 @@
       document.querySelectorAll('#probes .probe').forEach(container => {
         const probe = container.dataset.probe;
         const minutesInput = document.getElementById(`input-${probe}-minutes`);
+        const label = formatProbeLabel(probe);
 
         container.querySelectorAll('button').forEach(button => {
           button.addEventListener('click', async () => {
+            if (button.dataset.action === 'ping') {
+              await pingProbe(probe);
+              return;
+            }
+
             try {
               if (button.dataset.action === 'down') {
                 const minutes = getMinutesInput(minutesInput.id);
                 await postJson(`/api/probes/${probe}/down`, { minutes });
-                setNotification(`${probe} probe taken down for ${minutes} minute(s).`);
+                setNotification(`${label} probe taken down for ${minutes} minute(s).`);
                 logEvent('warn', `${probe} probe scheduled down`, { minutes });
-              } else {
+              } else if (button.dataset.action === 'up') {
                 await postJson(`/api/probes/${probe}/up`, {});
-                setNotification(`${probe} probe restored.`);
+                setNotification(`${label} probe restored.`);
                 logEvent('success', `${probe} probe restored`);
               }
             } catch (error) {
