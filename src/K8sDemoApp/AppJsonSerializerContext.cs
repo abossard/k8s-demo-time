@@ -17,6 +17,7 @@ namespace K8sDemoApp;
 [JsonSerializable(typeof(ScheduleDowntimeRequest))]
 [JsonSerializable(typeof(StressCpuRequest))]
 [JsonSerializable(typeof(StressMemoryRequest))]
+[JsonSerializable(typeof(FreezeRequest))]
 [JsonSerializable(typeof(ApiError))]
 [JsonSerializable(typeof(ApiMessage))]
 [JsonSerializable(typeof(HealthPayload))]

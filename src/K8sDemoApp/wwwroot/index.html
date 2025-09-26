@@ -467,6 +467,20 @@
         <button id="memory-stop" class="secondary">Stop Memory Stress</button>
       </div>
     </section>
+
+    <section id="chaos">
+      <h2>Chaos</h2>
+      <div class="status-card" style="gap: 1rem;">
+        <p style="margin: 0;">Trigger hard failure scenarios to validate restart and probe behaviour. Use with care.</p>
+        <div class="flex">
+          <button id="chaos-crash">Crash Pod</button>
+          <label>Freeze minutes
+            <input type="number" min="0.1" step="0.5" value="5" id="chaos-freeze-minutes">
+          </label>
+          <button id="chaos-freeze" class="secondary">Freeze Pod</button>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -947,6 +961,37 @@
       });
     }
 
+    function bindChaosControls() {
+      const crashButton = document.getElementById('chaos-crash');
+      if (crashButton) {
+        crashButton.addEventListener('click', async () => {
+          try {
+            const response = await postJson('/api/chaos/crash', {});
+            const message = response?.message || 'Crash scheduled. Container will exit momentarily.';
+            setNotification(message, false);
+            logEvent('warn', 'Crash requested');
+          } catch (error) {
+            setNotification(error.message, true);
+          }
+        });
+      }
+
+      const freezeButton = document.getElementById('chaos-freeze');
+      if (freezeButton) {
+        freezeButton.addEventListener('click', async () => {
+          try {
+            const minutes = getMinutesInput('chaos-freeze-minutes');
+            const response = await postJson('/api/chaos/freeze', { minutes });
+            const message = response?.message || `Application frozen for ${minutes} minute(s).`;
+            setNotification(message);
+            logEvent('warn', 'Freeze requested', { minutes });
+          } catch (error) {
+            setNotification(error.message, true);
+          }
+        });
+      }
+    }
+
     let eventSource;
     let reconnectTimer;
 
@@ -1001,6 +1046,7 @@
       initializeInputs();
       bindProbeControls();
       bindStressControls();
+      bindChaosControls();
       connectStream();
     });
   </script>
