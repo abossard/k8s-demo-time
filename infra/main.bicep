@@ -80,7 +80,7 @@ param systemNodeMinCount int = 1
 param systemNodeMaxCount int = 3
 
 @description('Enable node auto provisioning for the cluster (preview Karpenter integration).')
-param enableNodeAutoProvisioning bool = false
+param enableNodeAutoProvisioning bool = true
 
 @description('Pod address spaces used by the Azure CNI overlay (Cilium).')
 param podCidrs array = [
