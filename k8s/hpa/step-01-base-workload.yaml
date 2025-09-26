@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: k8s-demo-app
-          image: ghcr.io/example/k8s-demo-app:latest
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest # replace with $REGISTRY_LOGIN_SERVER/k8s-demo-app:<tag>
           imagePullPolicy: IfNotPresent
           env:
             - name: ASPNETCORE_URLS

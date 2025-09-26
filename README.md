@@ -45,14 +45,27 @@ Navigate to <http://localhost:8080> to open the dashboard. Key API routes:
 
 ## Container Image
 
-The top-level `Dockerfile` publishes a self-contained native AOT binary using the .NET 10 preview images.
+The top-level `Dockerfile` publishes a self-contained native AOT binary using the .NET 10 preview images. After the Azure deployment finishes (next section), use the generated registry to host workshop images:
 
 ```bash
-docker build -t ghcr.io/your-org/k8s-demo-app:latest .
-docker run --rm -p 8080:8080 ghcr.io/your-org/k8s-demo-app:latest
+# Capture the registry login server output by the deployment
+REGISTRY_LOGIN_SERVER=$(az acr show --name $REGISTRY_NAME --query loginServer -o tsv)
+
+# Build and tag the image – use a meaningful tag such as the git SHA or a release version
+IMAGE_TAG=$(git rev-parse --short HEAD)
+docker build -t $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG .
+
+# Push to ACR (authenticates with the registry first)
+az acr login --name $REGISTRY_NAME
+docker push $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG
+
+# (Optional) Maintain a "latest" tag for demos
+docker tag $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG \
+           $REGISTRY_LOGIN_SERVER/k8s-demo-app:latest
+docker push $REGISTRY_LOGIN_SERVER/k8s-demo-app:latest
 ```
 
-Update the image tag to match your own registry before pushing.
+Anonymous pull access is enabled by default in the Bicep template, so workshop clusters can pull without additional credentials. Pushes still require authentication via `az acr login`.
 
 ## Azure Deployment (Bicep)
 
@@ -96,7 +109,7 @@ Want to experiment with the preview Node Auto Provisioning feature? Append `enab
 
 ## Kubernetes Deployment
 
-The manifest in `k8s/deployment.yaml` deploys two replicas with startup, readiness, and liveness probes and exposes them via a ClusterIP service. After pushing your image and updating the manifest:
+The manifest in `k8s/deployment.yaml` deploys two replicas with startup, readiness, and liveness probes and exposes them via a ClusterIP service. After pushing your image, update `k8s/deployment.yaml` (and the tutorial manifests under `k8s/hpa/`) so the `image:` field points at `${REGISTRY_LOGIN_SERVER}/k8s-demo-app:${IMAGE_TAG}`. Then apply the manifest:
 
 ```bash
 kubectl apply -f k8s/deployment.yaml

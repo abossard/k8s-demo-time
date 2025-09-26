@@ -134,7 +134,7 @@ resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-05-02-p
           minCount: systemNodeMinCount
           maxCount: systemNodeMaxCount
           count: systemNodeMinCount
-          enableAutoScaling: true
+          enableAutoScaling: false
           enableEncryptionAtHost: false
           enableNodePublicIP: false
           kubeletDiskType: 'OS'
