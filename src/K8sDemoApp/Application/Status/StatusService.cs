@@ -25,7 +25,7 @@ internal sealed class StatusService
     private readonly object _resourceLock = new();
     private readonly Process _process;
     private readonly int _processorCount;
-    private static readonly TimeSpan UsageWindow = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan UsageWindow = TimeSpan.FromSeconds(10);
     private long _sequence;
 
     public StatusService(TimeProvider timeProvider, IProbeScheduler probes, IStressSupervisor stress)
@@ -129,6 +129,7 @@ internal sealed class StatusService
                 _cpuSamples.Dequeue();
             }
 
+            double cpuMillicores = 0;
             double cpuPercent = 0;
             if (_cpuSamples.Count > 1)
             {
@@ -136,17 +137,23 @@ internal sealed class StatusService
                 var elapsed = timestamp - oldest.Timestamp;
                 if (elapsed > TimeSpan.Zero)
                 {
-                    var cpuElapsed = (cpuTime - oldest.ProcessorTime).TotalMilliseconds;
-                    var elapsedMs = elapsed.TotalMilliseconds * _processorCount;
+                    var cpuElapsedMs = (cpuTime - oldest.ProcessorTime).TotalMilliseconds;
+                    var elapsedMs = elapsed.TotalMilliseconds;
                     if (elapsedMs > 0)
                     {
-                        cpuPercent = Math.Clamp(cpuElapsed / elapsedMs * 100d, 0d, 100d);
+                        var averageCores = Math.Max(cpuElapsedMs / elapsedMs, 0d);
+                        cpuMillicores = averageCores * 1000d;
+                        if (_processorCount > 0)
+                        {
+                            cpuPercent = averageCores / _processorCount * 100d;
+                        }
                     }
                 }
             }
 
-            var roundedCpu = Math.Round(cpuPercent, 2, MidpointRounding.AwayFromZero);
-            return new InstanceResourceUsage(roundedCpu, workingSet, managedMemory);
+            var roundedMillicores = Math.Round(cpuMillicores, 0, MidpointRounding.AwayFromZero);
+            var roundedPercent = Math.Round(cpuPercent, 1, MidpointRounding.AwayFromZero);
+            return new InstanceResourceUsage(roundedMillicores, roundedPercent, workingSet, managedMemory);
         }
     }
 

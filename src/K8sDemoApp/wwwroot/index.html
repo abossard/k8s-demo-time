@@ -355,7 +355,7 @@
         </div>
         <div class="meta-grid">
           <div class="meta-item">
-            <span class="meta-label">CPU Avg (1m)</span>
+            <span class="meta-label">CPU Avg (10s)</span>
             <span class="meta-value" id="resource-usage-cpu">–</span>
           </div>
           <div class="meta-item">
@@ -598,6 +598,28 @@
       return formatBytes(numeric);
     }
 
+    function formatMillicores(value) {
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        return null;
+      }
+
+      const rounded = Math.round(value);
+      return `${rounded}m`;
+    }
+
+    function formatCpuUsage(millicores, percent) {
+      const cpuText = formatMillicores(millicores);
+      const percentText = typeof percent === 'number' && Number.isFinite(percent)
+        ? `${percent.toFixed(1)}%`
+        : null;
+
+      if (cpuText && percentText) {
+        return `${cpuText} (${percentText})`;
+      }
+
+      return cpuText ?? percentText ?? '–';
+    }
+
     function formatProbeLabel(probe) {
       if (!probe) {
         return 'Probe';
@@ -687,9 +709,7 @@
       setMetaValue('resource-limit-memory', formatMemoryQuantity(resources?.limits?.memory ?? null));
 
       const usage = resources?.usage ?? null;
-      const cpu = typeof usage?.cpuPercentAverageLastMinute === 'number'
-        ? `${usage.cpuPercentAverageLastMinute.toFixed(1)}%`
-        : '–';
+      const cpu = formatCpuUsage(usage?.cpuMillicoresAverageLastWindow, usage?.cpuPercentAverageLastWindow);
       setMetaValue('resource-usage-cpu', cpu);
 
       const workingSet = formatBytes(usage?.workingSetBytes);

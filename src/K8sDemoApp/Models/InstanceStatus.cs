@@ -35,6 +35,7 @@ public sealed record ResourceCapacity(
     string? Memory);
 
 public sealed record InstanceResourceUsage(
-    double CpuPercentAverageLastMinute,
+    double CpuMillicoresAverageLastWindow,
+    double CpuPercentAverageLastWindow,
     long WorkingSetBytes,
     long ManagedMemoryBytes);
