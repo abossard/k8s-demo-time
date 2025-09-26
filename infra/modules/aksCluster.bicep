@@ -98,10 +98,7 @@ resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-05-02-p
   location: location
   tags: tags
   identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${kubeletIdentity.id}': {}
-    }
+    type: 'SystemAssigned'
   }
   properties: union({
       dnsPrefix: dnsPrefix
