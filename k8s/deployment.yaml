@@ -17,7 +17,7 @@ spec:
       containers:
         - name: k8s-demo-app
           image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest # replace with $REGISTRY_LOGIN_SERVER/k8s-demo-app:<tag>
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: ASPNETCORE_URLS
               value: http://+:8080

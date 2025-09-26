@@ -51,9 +51,12 @@ The top-level `Dockerfile` publishes a self-contained native AOT binary using th
 # Capture the registry login server output by the deployment
 REGISTRY_LOGIN_SERVER=$(az acr show --name $REGISTRY_NAME --query loginServer -o tsv)
 
+# Ensure we emit AMD64 layers (required for AKS nodes)
+export DOCKER_DEFAULT_PLATFORM=linux/amd64
+
 # Build and tag the image – use a meaningful tag such as the git SHA or a release version
 IMAGE_TAG=$(git rev-parse --short HEAD)
-docker build -t $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG .
+docker build --platform linux/amd64 -t $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG .
 
 # Push to ACR (authenticates with the registry first)
 az acr login --name $REGISTRY_NAME
