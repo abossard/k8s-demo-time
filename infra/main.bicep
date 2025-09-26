@@ -129,6 +129,9 @@ param enableAzureRBAC bool = true
 @description('Tenant ID used for Entra ID integration. Defaults to the current deployment tenant.')
 param aadTenantId string = tenant().tenantId
 
+@description('Object ID for the principal that should receive the built-in AKS Cluster Admin role. Leave blank to skip the assignment.')
+param clusterAdminPrincipalId string = ''
+
 resource managedResourceGroup 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: resourceGroupName
   location: location
@@ -203,13 +206,7 @@ module kubeletAcrPull 'modules/acrRoleAssignment.bicep' = {
   }
 }
 
-module currentClient 'modules/clientConfig.json' = {
-  name: 'currentClientDetails'
-}
-
-var clusterAdminPrincipalId = currentClient.outputs.objectId
-
-module clusterAdminRoleAssignment 'modules/aksClusterAdminRoleAssignment.bicep' = {
+module clusterAdminRoleAssignment 'modules/aksClusterAdminRoleAssignment.bicep' = if (!empty(clusterAdminPrincipalId)) {
   name: 'aksClusterAdminRoleAssignment'
   scope: aksResourceGroup
   dependsOn: [

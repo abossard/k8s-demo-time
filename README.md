@@ -65,6 +65,7 @@ az account set --subscription <subscription-id>
 # Choose globally unique names for the registry and DNS prefix
 REGISTRY_NAME="k8sdemo$RANDOM"
 AKS_DNS_PREFIX="k8sdemo$RANDOM"
+AKS_CLUSTER_ADMIN_ID=$(az ad signed-in-user show --query id -o tsv)
 
 az deployment sub create \
   --location westeurope \
@@ -75,7 +76,8 @@ az deployment sub create \
       aksResourceGroupName=k8s-demo-aks-rg \
       registryName=$REGISTRY_NAME \
       aksClusterName=k8s-demo-aks \
-      aksDnsPrefix=$AKS_DNS_PREFIX
+      aksDnsPrefix=$AKS_DNS_PREFIX \
+      clusterAdminPrincipalId=$AKS_CLUSTER_ADMIN_ID
 
 # Grab kubeconfig once the deployment finishes
 az aks get-credentials --resource-group k8s-demo-aks-rg --name k8s-demo-aks
@@ -84,7 +86,7 @@ az aks get-credentials --resource-group k8s-demo-aks-rg --name k8s-demo-aks
 az acr login --name $REGISTRY_NAME
 ```
 
-Outputs listed at the end of the deployment include resource IDs for the registry, AKS cluster, and kubelet identity—handy for wiring into downstream pipelines.
+Outputs listed at the end of the deployment include resource IDs for the registry, AKS cluster, and kubelet identity—handy for wiring into downstream pipelines. If you have never deployed AKS in this subscription before, run `az provider register --namespace Microsoft.ContainerService` once so the resource provider is available.
 
 ## Kubernetes Deployment
 

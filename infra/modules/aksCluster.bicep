@@ -112,12 +112,12 @@ var azureMonitorProfile = enableAzureMonitorMetrics ? {
   }
 } : {}
 
-resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-04-01' = {
+resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-05-02-preview' = {
   name: clusterName
   location: location
   tags: tags
   identity: {
-    type: 'SystemAssigned,UserAssigned'
+    type: 'UserAssigned'
     userAssignedIdentities: {
       '${kubeletIdentity.id}': {}
     }

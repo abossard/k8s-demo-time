@@ -12,7 +12,7 @@ param roleDefinitionId string
 @description('Optional deterministic seed for the role assignment GUID name.')
 param assignmentGuidSeed string = principalId
 
-resource cluster 'Microsoft.ContainerService/managedClusters@2024-04-01' existing = {
+resource cluster 'Microsoft.ContainerService/managedClusters@2024-05-02-preview' existing = {
   name: clusterName
 }
 
