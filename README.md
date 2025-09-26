@@ -54,6 +54,38 @@ docker run --rm -p 8080:8080 ghcr.io/your-org/k8s-demo-app:latest
 
 Update the image tag to match your own registry before pushing.
 
+## Azure Deployment (Bicep)
+
+Use `infra/main.bicep` to provision the Azure Container Registry and AKS cluster that back the demo. The template deploys at subscription scope, so make sure you have the right subscription selected.
+
+```bash
+az login
+az account set --subscription <subscription-id>
+
+# Choose globally unique names for the registry and DNS prefix
+REGISTRY_NAME="k8sdemo$RANDOM"
+AKS_DNS_PREFIX="k8sdemo$RANDOM"
+
+az deployment sub create \
+  --location westeurope \
+  --name k8s-demo-$(date +%Y%m%d%H%M%S) \
+  --template-file infra/main.bicep \
+  --parameters \
+      resourceGroupName=k8s-demo-rg \
+      aksResourceGroupName=k8s-demo-aks-rg \
+      registryName=$REGISTRY_NAME \
+      aksClusterName=k8s-demo-aks \
+      aksDnsPrefix=$AKS_DNS_PREFIX
+
+# Grab kubeconfig once the deployment finishes
+az aks get-credentials --resource-group k8s-demo-aks-rg --name k8s-demo-aks
+
+# (Optional) Log in to the new ACR
+az acr login --name $REGISTRY_NAME
+```
+
+Outputs listed at the end of the deployment include resource IDs for the registry, AKS cluster, and kubelet identity—handy for wiring into downstream pipelines.
+
 ## Kubernetes Deployment
 
 The manifest in `k8s/deployment.yaml` deploys two replicas with startup, readiness, and liveness probes and exposes them via a ClusterIP service. After pushing your image and updating the manifest:
