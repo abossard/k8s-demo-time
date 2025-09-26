@@ -63,24 +63,28 @@ az login
 az account set --subscription <subscription-id>
 
 # Choose globally unique names for the registry and DNS prefix
-REGISTRY_NAME="k8sdemo$RANDOM"
-AKS_DNS_PREFIX="k8sdemo$RANDOM"
+PREFIX="anbo" # customise for your own environment; keep it alphanumeric and lowercase
+REGISTRY_NAME="k8sdemo$PREFIX"
+AKS_DNS_PREFIX="k8sdemo$PREFIX"
+DEPLOYMENT_NAME="k8s-demo"
+LOCATION="swedencentral" # override if you need a different Azure region
+RESOURCE_GROUP_NAME="k8s-demo-rg"
 AKS_CLUSTER_ADMIN_ID=$(az ad signed-in-user show --query id -o tsv)
 
 az deployment sub create \
-  --location westeurope \
-  --name k8s-demo-$(date +%Y%m%d%H%M%S) \
+  --location $LOCATION \
+  --name $DEPLOYMENT_NAME \
   --template-file infra/main.bicep \
   --parameters \
-      resourceGroupName=k8s-demo-rg \
-      aksResourceGroupName=k8s-demo-aks-rg \
+      location=$LOCATION \
+      resourceGroupName=$RESOURCE_GROUP_NAME \
       registryName=$REGISTRY_NAME \
       aksClusterName=k8s-demo-aks \
       aksDnsPrefix=$AKS_DNS_PREFIX \
       clusterAdminPrincipalId=$AKS_CLUSTER_ADMIN_ID
 
 # Grab kubeconfig once the deployment finishes
-az aks get-credentials --resource-group k8s-demo-aks-rg --name k8s-demo-aks
+az aks get-credentials --resource-group $RESOURCE_GROUP_NAME --name k8s-demo-aks
 
 # (Optional) Log in to the new ACR
 az acr login --name $REGISTRY_NAME

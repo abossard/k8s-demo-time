@@ -1,10 +1,10 @@
 targetScope = 'subscription'
 
-@description('Name of the resource group to create for the container registry.')
+@description('Name of the resource group that will host the registry, AKS cluster, and related resources.')
 param resourceGroupName string
 
-@description('Azure region for the container registry resource group and registry.')
-param location string = deployment().location
+@description('Azure region for the container registry resource group and registry. Defaults to Sweden Central.')
+param location string = 'swedencentral'
 
 @description('Name of the Azure Container Registry. Must be globally unique and use only lowercase alphanumeric characters.')
 @minLength(5)
@@ -40,12 +40,6 @@ param commonTags object = {}
 
 @description('Region to deploy the container registry. Defaults to the resource group location.')
 param registryLocation string = location
-
-@description('Name of the resource group that will host the AKS cluster.')
-param aksResourceGroupName string
-
-@description('Azure region for the AKS resource group and cluster.')
-param aksLocation string = location
 
 @description('Name of the AKS cluster.')
 param aksClusterName string
@@ -119,21 +113,15 @@ param aadTenantId string = tenant().tenantId
 @description('Object ID for the principal that should receive the built-in AKS Cluster Admin role. Leave blank to skip the assignment.')
 param clusterAdminPrincipalId string = ''
 
-resource managedResourceGroup 'Microsoft.Resources/resourceGroups@2022-09-01' = {
+resource deploymentResourceGroup 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: resourceGroupName
   location: location
   tags: commonTags
 }
 
-resource aksResourceGroup 'Microsoft.Resources/resourceGroups@2022-09-01' = {
-  name: aksResourceGroupName
-  location: aksLocation
-  tags: commonTags
-}
-
 module containerRegistry 'modules/containerRegistry.bicep' = {
   name: 'acrDeployment'
-  scope: managedResourceGroup
+  scope: deploymentResourceGroup
   params: {
     registryName: registryName
     registryLocation: registryLocation
@@ -148,10 +136,10 @@ module containerRegistry 'modules/containerRegistry.bicep' = {
 
 module aksCluster 'modules/aksCluster.bicep' = {
   name: 'aksDeployment'
-  scope: aksResourceGroup
+  scope: deploymentResourceGroup
   params: {
     clusterName: aksClusterName
-    location: aksLocation
+    location: location
     dnsPrefix: aksDnsPrefix
     kubernetesVersion: kubernetesVersion
     upgradeChannel: upgradeChannel
@@ -178,7 +166,7 @@ var aksClusterAdminRoleDefinitionId = subscriptionResourceId('Microsoft.Authoriz
 
 module kubeletAcrPull 'modules/acrRoleAssignment.bicep' = {
   name: 'acrPullAssignment'
-  scope: managedResourceGroup
+  scope: deploymentResourceGroup
   dependsOn: [
     containerRegistry
   ]
@@ -192,7 +180,7 @@ module kubeletAcrPull 'modules/acrRoleAssignment.bicep' = {
 
 module clusterAdminRoleAssignment 'modules/aksClusterAdminRoleAssignment.bicep' = if (!empty(clusterAdminPrincipalId)) {
   name: 'aksClusterAdminRoleAssignment'
-  scope: aksResourceGroup
+  scope: deploymentResourceGroup
   dependsOn: [
     aksCluster
   ]
@@ -204,9 +192,9 @@ module clusterAdminRoleAssignment 'modules/aksClusterAdminRoleAssignment.bicep' 
   }
 }
 
-output resourceGroupId string = managedResourceGroup.id
+output resourceGroupId string = deploymentResourceGroup.id
 output registryResourceId string = containerRegistry.outputs.registryResourceId
 output registryLoginServer string = containerRegistry.outputs.registryLoginServer
-output aksResourceGroupId string = aksResourceGroup.id
+output aksResourceGroupId string = deploymentResourceGroup.id
 output aksClusterResourceId string = aksCluster.outputs.clusterResourceId
 output kubeletIdentityResourceId string = aksCluster.outputs.kubeletIdentityResourceId
