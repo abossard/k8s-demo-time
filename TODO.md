@@ -1,0 +1,11 @@
+- [x] Add configurable parameters + resource group for AKS deployment.
+- [x] Implement AKS module meeting requirements (AAD, RBAC, KEDA, Dapr, CNI overlay, auto updates, managed identity).
+- [x] Grant agentpool managed identity AcrPull role on registry.
+- [x] Validate Bicep template (build + lint) after changes.
+- [x] Ensure current deploying principal receives AKS Cluster Admin role.
+- [ ] Assess Azure Developer CLI project requirements and map repo structure (services, infra, app).
+- [ ] Draft azure.yaml describing services, infra path (/infra), and deployment hooks for container build/push.
+- [ ] Refine /infra Bicep to match azd conventions (environmentName/location params, outputs for service endpoints, azd-managed principal inputs).
+- [ ] Add azd-friendly parameter files (e.g. infra/main.bicepparam) sourcing values from azd env variables.
+- [ ] Configure azd pipeline/dev container assets (env templates, .azure directories) and document workflow commands.
+- [ ] Dry-run azd provision/deploy to validate new structure without affecting resources.

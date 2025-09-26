@@ -1,9 +1,9 @@
 targetScope = 'subscription'
 
-@description('Name of the resource group to create.')
+@description('Name of the resource group to create for the container registry.')
 param resourceGroupName string
 
-@description('Azure region for the resource group and registry.')
+@description('Azure region for the container registry resource group and registry.')
 param location string = deployment().location
 
 @description('Name of the Azure Container Registry. Must be globally unique and use only lowercase alphanumeric characters.')
@@ -41,9 +41,103 @@ param commonTags object = {}
 @description('Region to deploy the container registry. Defaults to the resource group location.')
 param registryLocation string = location
 
+@description('Name of the resource group that will host the AKS cluster.')
+param aksResourceGroupName string
+
+@description('Azure region for the AKS resource group and cluster.')
+param aksLocation string = location
+
+@description('Name of the AKS cluster.')
+param aksClusterName string
+
+@description('DNS prefix for the AKS API server endpoint.')
+param aksDnsPrefix string
+
+@description('Name for the user-assigned managed identity used by the AKS kubelet.')
+param kubeletIdentityName string = '${aksClusterName}-kubelet-mi'
+
+@description('Object IDs of Entra ID groups granted cluster admin rights.')
+param adminGroupObjectIds array = []
+
+@description('Optional Kubernetes version to deploy. Leave blank to use the default version for the region.')
+param kubernetesVersion string = ''
+
+@description('Upgrade channel controlling automatic control-plane and node updates.')
+@allowed([
+  'rapid'
+  'stable'
+  'patch'
+  'node-image'
+  'none'
+])
+param upgradeChannel string = 'stable'
+
+@description('Node OS image upgrade channel controlling automatic node image updates.')
+@allowed([
+  'NodeImage'
+  'None'
+])
+param nodeOsUpgradeChannel string = 'NodeImage'
+
+@description('Virtual machine size for the system node pool.')
+param systemNodeVmSize string = 'Standard_B2s'
+
+@description('Minimum number of nodes in the system node pool when autoscaling.')
+param systemNodeMinCount int = 1
+
+@description('Maximum number of nodes in the system node pool when autoscaling.')
+param systemNodeMaxCount int = 3
+
+@description('Enable node auto provisioning for the cluster (preview Karpenter integration).')
+param enableNodeAutoProvisioning bool = true
+
+@description('Default handling of auto-provisioned node pools when node auto provisioning is enabled.')
+@allowed([
+  'Auto'
+  'None'
+])
+param nodeAutoProvisioningDefaultPools string = 'Auto'
+
+@description('Pod address spaces used by the Azure CNI overlay (Cilium).')
+param podCidrs array = [
+  '10.244.0.0/16'
+]
+
+@description('Service CIDR ranges for cluster Kubernetes services.')
+param serviceCidrs array = [
+  '10.0.0.0/16'
+]
+
+@description('DNS service IP address within the service CIDR.')
+param dnsServiceIp string = '10.0.0.10'
+
+@description('Docker bridge network range on each node.')
+param dockerBridgeCidr string = '172.17.0.1/16'
+
+@description('Enable the Dapr extension for the cluster.')
+param enableDapr bool = true
+
+@description('Enable KEDA for workload autoscaling.')
+param enableKeda bool = true
+
+@description('Enable Azure Monitor managed Prometheus integration.')
+param enableAzureMonitorMetrics bool = true
+
+@description('Enable Azure RBAC for Kubernetes authorization.')
+param enableAzureRBAC bool = true
+
+@description('Tenant ID used for Entra ID integration. Defaults to the current deployment tenant.')
+param aadTenantId string = tenant().tenantId
+
 resource managedResourceGroup 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: resourceGroupName
   location: location
+  tags: commonTags
+}
+
+resource aksResourceGroup 'Microsoft.Resources/resourceGroups@2022-09-01' = {
+  name: aksResourceGroupName
+  location: aksLocation
   tags: commonTags
 }
 
@@ -62,6 +156,76 @@ module containerRegistry 'modules/containerRegistry.bicep' = {
   }
 }
 
+module aksCluster 'modules/aksCluster.bicep' = {
+  name: 'aksDeployment'
+  scope: aksResourceGroup
+  params: {
+    clusterName: aksClusterName
+    location: aksLocation
+    dnsPrefix: aksDnsPrefix
+    kubernetesVersion: kubernetesVersion
+    upgradeChannel: upgradeChannel
+    nodeOsUpgradeChannel: nodeOsUpgradeChannel
+    systemNodeVmSize: systemNodeVmSize
+    systemNodeMinCount: systemNodeMinCount
+    systemNodeMaxCount: systemNodeMaxCount
+    enableAzureRBAC: enableAzureRBAC
+    adminGroupObjectIds: adminGroupObjectIds
+    enableNodeAutoProvisioning: enableNodeAutoProvisioning
+    nodeAutoProvisioningDefaultPools: nodeAutoProvisioningDefaultPools
+    podCidrs: podCidrs
+    serviceCidrs: serviceCidrs
+    dnsServiceIp: dnsServiceIp
+    dockerBridgeCidr: dockerBridgeCidr
+    enableDapr: enableDapr
+    enableKeda: enableKeda
+    enableAzureMonitorMetrics: enableAzureMonitorMetrics
+    aadTenantId: aadTenantId
+    kubeletIdentityName: kubeletIdentityName
+    tags: commonTags
+  }
+}
+
+var acrPullRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+var aksClusterAdminRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b1ff04bb-8a4e-4dc4-8eb5-8693973ce19b')
+
+module kubeletAcrPull 'modules/acrRoleAssignment.bicep' = {
+  name: 'acrPullAssignment'
+  scope: managedResourceGroup
+  dependsOn: [
+    containerRegistry
+  ]
+  params: {
+    registryName: registryName
+    principalId: aksCluster.outputs.kubeletPrincipalId
+    roleDefinitionId: acrPullRoleDefinitionId
+    assignmentGuidSeed: kubeletIdentityName
+  }
+}
+
+module currentClient 'modules/clientConfig.json' = {
+  name: 'currentClientDetails'
+}
+
+var clusterAdminPrincipalId = currentClient.outputs.objectId
+
+module clusterAdminRoleAssignment 'modules/aksClusterAdminRoleAssignment.bicep' = {
+  name: 'aksClusterAdminRoleAssignment'
+  scope: aksResourceGroup
+  dependsOn: [
+    aksCluster
+  ]
+  params: {
+    clusterName: aksClusterName
+    principalId: clusterAdminPrincipalId
+    roleDefinitionId: aksClusterAdminRoleDefinitionId
+    assignmentGuidSeed: clusterAdminPrincipalId
+  }
+}
+
 output resourceGroupId string = managedResourceGroup.id
 output registryResourceId string = containerRegistry.outputs.registryResourceId
 output registryLoginServer string = containerRegistry.outputs.registryLoginServer
+output aksResourceGroupId string = aksResourceGroup.id
+output aksClusterResourceId string = aksCluster.outputs.clusterResourceId
+output kubeletIdentityResourceId string = aksCluster.outputs.kubeletIdentityResourceId
