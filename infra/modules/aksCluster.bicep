@@ -139,6 +139,9 @@ resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-05-02-p
           enableNodePublicIP: false
           kubeletDiskType: 'OS'
           maxPods: 110
+          nodeTaints: [
+            'CriticalAddonsOnly=true:NoSchedule'
+          ]
         }
       ]
     },
