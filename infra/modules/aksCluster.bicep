@@ -47,13 +47,6 @@ param adminGroupObjectIds array
 @description('Enable node auto provisioning (Karpenter).')
 param enableNodeAutoProvisioning bool
 
-@description('Default handling of auto-provisioned node pools when node auto provisioning is enabled.')
-@allowed([
-  'Auto'
-  'None'
-])
-param nodeAutoProvisioningDefaultPools string
-
 @description('Pod address spaces used by the Azure CNI overlay.')
 param podCidrs array
 
@@ -62,12 +55,6 @@ param serviceCidrs array
 
 @description('DNS service IP address for the cluster.')
 param dnsServiceIp string
-
-@description('Docker bridge CIDR for cluster nodes.')
-param dockerBridgeCidr string
-
-@description('Enable the Dapr extension for the cluster.')
-param enableDapr bool
 
 @description('Enable KEDA workload autoscaler for the cluster.')
 param enableKeda bool
@@ -90,15 +77,9 @@ resource kubeletIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
   tags: tags
 }
 
-var nodeProvisioningProfile = enableNodeAutoProvisioning
-  ? {
-      mode: 'Auto'
-      defaultNodePools: nodeAutoProvisioningDefaultPools
-    }
-  : {
-      mode: 'Manual'
-      defaultNodePools: 'None'
-    }
+var nodeProvisioningProfile = {
+  mode: enableNodeAutoProvisioning ? 'Auto' : 'Manual'
+}
 
 var versionProfile = empty(kubernetesVersion) ? {} : {
   kubernetesVersion: kubernetesVersion
@@ -150,9 +131,6 @@ resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-05-02-p
         }
       }
       addonProfiles: {
-        dapr: {
-          enabled: enableDapr
-        }
       }
       networkProfile: {
         networkPlugin: 'azure'
@@ -163,7 +141,6 @@ resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-05-02-p
         podCidrs: podCidrs
         serviceCidrs: serviceCidrs
         dnsServiceIP: dnsServiceIp
-        dockerBridgeCidr: dockerBridgeCidr
       }
       agentPoolProfiles: [
         {

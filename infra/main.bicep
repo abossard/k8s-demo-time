@@ -89,14 +89,7 @@ param systemNodeMinCount int = 1
 param systemNodeMaxCount int = 3
 
 @description('Enable node auto provisioning for the cluster (preview Karpenter integration).')
-param enableNodeAutoProvisioning bool = true
-
-@description('Default handling of auto-provisioned node pools when node auto provisioning is enabled.')
-@allowed([
-  'Auto'
-  'None'
-])
-param nodeAutoProvisioningDefaultPools string = 'Auto'
+param enableNodeAutoProvisioning bool = false
 
 @description('Pod address spaces used by the Azure CNI overlay (Cilium).')
 param podCidrs array = [
@@ -110,12 +103,6 @@ param serviceCidrs array = [
 
 @description('DNS service IP address within the service CIDR.')
 param dnsServiceIp string = '10.0.0.10'
-
-@description('Docker bridge network range on each node.')
-param dockerBridgeCidr string = '172.17.0.1/16'
-
-@description('Enable the Dapr extension for the cluster.')
-param enableDapr bool = true
 
 @description('Enable KEDA for workload autoscaling.')
 param enableKeda bool = true
@@ -175,12 +162,9 @@ module aksCluster 'modules/aksCluster.bicep' = {
     enableAzureRBAC: enableAzureRBAC
     adminGroupObjectIds: adminGroupObjectIds
     enableNodeAutoProvisioning: enableNodeAutoProvisioning
-    nodeAutoProvisioningDefaultPools: nodeAutoProvisioningDefaultPools
     podCidrs: podCidrs
     serviceCidrs: serviceCidrs
     dnsServiceIp: dnsServiceIp
-    dockerBridgeCidr: dockerBridgeCidr
-    enableDapr: enableDapr
     enableKeda: enableKeda
     enableAzureMonitorMetrics: enableAzureMonitorMetrics
     aadTenantId: aadTenantId

@@ -88,6 +88,8 @@ az acr login --name $REGISTRY_NAME
 
 Outputs listed at the end of the deployment include resource IDs for the registry, AKS cluster, and kubelet identity—handy for wiring into downstream pipelines. If you have never deployed AKS in this subscription before, run `az provider register --namespace Microsoft.ContainerService` once so the resource provider is available.
 
+Want to experiment with the preview Node Auto Provisioning feature? Append `enableNodeAutoProvisioning=true` to the `--parameters` list once the feature is enabled in your subscription.
+
 ## Kubernetes Deployment
 
 The manifest in `k8s/deployment.yaml` deploys two replicas with startup, readiness, and liveness probes and exposes them via a ClusterIP service. After pushing your image and updating the manifest:

@@ -1,5 +1,5 @@
 - [x] Add configurable parameters + resource group for AKS deployment.
-- [x] Implement AKS module meeting requirements (AAD, RBAC, KEDA, Dapr, CNI overlay, auto updates, managed identity).
+- [x] Implement AKS module meeting requirements (AAD, RBAC, KEDA, CNI overlay, auto updates, managed identity).
 - [x] Grant agentpool managed identity AcrPull role on registry.
 - [x] Validate Bicep template (build + lint) after changes.
 - [x] Ensure current deploying principal receives AKS Cluster Admin role.
