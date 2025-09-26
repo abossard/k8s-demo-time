@@ -65,17 +65,8 @@ param enableAzureMonitorMetrics bool
 @description('Tenant ID used for Entra ID integration.')
 param aadTenantId string
 
-@description('Name of the user-assigned managed identity that kubelet will use.')
-param kubeletIdentityName string
-
 @description('Tags to apply to all resources created by this module.')
 param tags object
-
-resource kubeletIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: kubeletIdentityName
-  location: location
-  tags: tags
-}
 
 var nodeProvisioningProfile = {
   mode: enableNodeAutoProvisioning ? 'Auto' : 'Manual'
@@ -114,13 +105,6 @@ resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-05-02-p
         nodeOSUpgradeChannel: nodeOsUpgradeChannel
       }
       disableLocalAccounts: true
-      identityProfile: {
-        kubeletidentity: {
-          resourceId: kubeletIdentity.id
-          clientId: kubeletIdentity.properties.clientId
-          objectId: kubeletIdentity.properties.principalId
-        }
-      }
       nodeProvisioningProfile: nodeProvisioningProfile
       workloadAutoScalerProfile: {
         keda: {
@@ -163,5 +147,5 @@ resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-05-02-p
 }
 
 output clusterResourceId string = managedCluster.id
-output kubeletIdentityResourceId string = kubeletIdentity.id
-output kubeletPrincipalId string = kubeletIdentity.properties.principalId
+output kubeletIdentityResourceId string = managedCluster.properties.identityProfile.kubeletidentity.resourceId
+output kubeletPrincipalId string = managedCluster.properties.identityProfile.kubeletidentity.objectId

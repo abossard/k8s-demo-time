@@ -47,9 +47,6 @@ param aksClusterName string
 @description('DNS prefix for the AKS API server endpoint.')
 param aksDnsPrefix string
 
-@description('Name for the user-assigned managed identity used by the AKS kubelet.')
-param kubeletIdentityName string = '${aksClusterName}-kubelet-mi'
-
 @description('Object IDs of Entra ID groups granted cluster admin rights.')
 param adminGroupObjectIds array = []
 
@@ -156,7 +153,6 @@ module aksCluster 'modules/aksCluster.bicep' = {
     enableKeda: enableKeda
     enableAzureMonitorMetrics: enableAzureMonitorMetrics
     aadTenantId: aadTenantId
-    kubeletIdentityName: kubeletIdentityName
     tags: commonTags
   }
 }
@@ -174,7 +170,7 @@ module kubeletAcrPull 'modules/acrRoleAssignment.bicep' = {
     registryName: registryName
     principalId: aksCluster.outputs.kubeletPrincipalId
     roleDefinitionId: acrPullRoleDefinitionId
-    assignmentGuidSeed: kubeletIdentityName
+    assignmentGuidSeed: aksClusterName
   }
 }
 
