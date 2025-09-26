@@ -14,10 +14,11 @@ What we'll learn today:
 
 `K8sDemoApp` is a .NET 10 native AOT Web API designed to showcase probe behaviour and resource pressure inside Kubernetes. Each replica provides:
 
-- A static dashboard (`/`) that displays hostname, uptime, and probe status and exposes controls to toggle probes or start stress tests.
+- A static dashboard (`/`) that displays hostname, uptime, resource requests/limits, live CPU & memory usage, and exposes controls to toggle probes or start stress tests.
 - JSON API endpoints under `/api/*` for automation and UI integration.
 - Startup, readiness, and liveness probes under `/health/{startup|readiness|liveness}` that you can intentionally fail for N minutes.
 - CPU and memory stress endpoints that hold pressure for a configurable duration and release automatically.
+- Chaos controls to crash the process or freeze request handling so you can observe probe behaviour and restarts.
 
 The service uses source-generated JSON metadata so the AOT binary stays small and fast to cold-start.
 
@@ -39,6 +40,8 @@ Navigate to <http://localhost:8080> to open the dashboard. Key API routes:
 - `DELETE /api/stress/cpu` — cancel CPU pressure ahead of schedule.
 - `POST /api/stress/memory` with `{ "minutes": 1, "targetMegabytes": 1024 }` — allocate and hold memory.
 - `DELETE /api/stress/memory` — release memory pressure early.
+- `POST /api/chaos/crash` — schedule an immediate process crash (container exit).
+- `POST /api/chaos/freeze` with `{ "minutes": 5 }` — block request handling for the selected duration.
 
 ## Container Image
 
