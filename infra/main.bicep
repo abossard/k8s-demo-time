@@ -98,6 +98,9 @@ param dnsServiceIp string = '10.0.0.10'
 @description('Enable KEDA for workload autoscaling.')
 param enableKeda bool = true
 
+@description('Enable the managed Vertical Pod Autoscaler add-on (preview).')
+param enableVerticalPodAutoscaler bool = false
+
 @description('Enable Azure Monitor managed Prometheus integration.')
 param enableAzureMonitorMetrics bool = true
 
@@ -143,7 +146,6 @@ module aksCluster 'modules/aksCluster.bicep' = {
     nodeOsUpgradeChannel: nodeOsUpgradeChannel
     systemNodeVmSize: systemNodeVmSize
     systemNodeMinCount: systemNodeMinCount
-    systemNodeMaxCount: systemNodeMaxCount
     enableAzureRBAC: enableAzureRBAC
     adminGroupObjectIds: adminGroupObjectIds
     enableNodeAutoProvisioning: enableNodeAutoProvisioning
@@ -151,6 +153,7 @@ module aksCluster 'modules/aksCluster.bicep' = {
     serviceCidrs: serviceCidrs
     dnsServiceIp: dnsServiceIp
     enableKeda: enableKeda
+    enableVerticalPodAutoscaler: enableVerticalPodAutoscaler
     enableAzureMonitorMetrics: enableAzureMonitorMetrics
     aadTenantId: aadTenantId
     tags: commonTags

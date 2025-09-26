@@ -35,9 +35,6 @@ param systemNodeVmSize string
 @description('Minimum number of nodes in the system node pool.')
 param systemNodeMinCount int
 
-@description('Maximum number of nodes in the system node pool.')
-param systemNodeMaxCount int
-
 @description('Enable Azure RBAC for Kubernetes authorization.')
 param enableAzureRBAC bool
 
@@ -58,6 +55,9 @@ param dnsServiceIp string
 
 @description('Enable KEDA workload autoscaler for the cluster.')
 param enableKeda bool
+
+@description('Enable the managed Vertical Pod Autoscaler add-on.')
+param enableVerticalPodAutoscaler bool = true
 
 @description('Enable Azure Monitor managed Prometheus metrics collection.')
 param enableAzureMonitorMetrics bool
@@ -84,6 +84,17 @@ var azureMonitorProfile = enableAzureMonitorMetrics ? {
   }
 } : {}
 
+var workloadAutoScalerProfile = union({
+    keda: {
+      enabled: enableKeda
+    }
+  },
+  enableVerticalPodAutoscaler ? {
+    verticalPodAutoscaler: {
+      enabled: true
+    }
+  } : {})
+
 resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-05-02-preview' = {
   name: clusterName
   location: location
@@ -106,11 +117,7 @@ resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-05-02-p
       }
       disableLocalAccounts: true
       nodeProvisioningProfile: nodeProvisioningProfile
-      workloadAutoScalerProfile: {
-        keda: {
-          enabled: enableKeda
-        }
-      }
+      workloadAutoScalerProfile: workloadAutoScalerProfile
       addonProfiles: {
       }
       networkProfile: {
@@ -131,8 +138,6 @@ resource managedCluster 'Microsoft.ContainerService/managedClusters@2024-05-02-p
           osType: 'Linux'
           osSKU: 'Ubuntu'
           vmSize: systemNodeVmSize
-          minCount: systemNodeMinCount
-          maxCount: systemNodeMaxCount
           count: systemNodeMinCount
           enableAutoScaling: false
           enableEncryptionAtHost: false
