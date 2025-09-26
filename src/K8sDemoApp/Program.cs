@@ -14,6 +14,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddProbeModule();
 builder.Services.AddStressModule();
 builder.Services.AddStatusModule();
+builder.Services.AddHostedService<StatusHeartbeatService>();
 
 var app = builder.Build();
 

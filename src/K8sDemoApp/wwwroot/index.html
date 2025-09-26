@@ -335,6 +335,38 @@
             <span class="meta-value" id="cluster-domain">–</span>
           </div>
         </div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">CPU Request</span>
+            <span class="meta-value" id="resource-request-cpu">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">CPU Limit</span>
+            <span class="meta-value" id="resource-limit-cpu">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Memory Request</span>
+            <span class="meta-value" id="resource-request-memory">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Memory Limit</span>
+            <span class="meta-value" id="resource-limit-memory">–</span>
+          </div>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">CPU Avg (1m)</span>
+            <span class="meta-value" id="resource-usage-cpu">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Working Set</span>
+            <span class="meta-value" id="resource-usage-working-set">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Managed Heap</span>
+            <span class="meta-value" id="resource-usage-managed">–</span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -507,6 +539,65 @@
       return '–';
     }
 
+    function formatBytes(value) {
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        return '–';
+      }
+
+      const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+      let index = 0;
+      let size = value;
+
+      while (size >= 1024 && index < units.length - 1) {
+        size /= 1024;
+        index += 1;
+      }
+
+      const digits = index === 0 || size >= 100 ? 0 : size >= 10 ? 1 : 2;
+      return `${size.toFixed(digits)} ${units[index]}`;
+    }
+
+    function isNumericLike(value) {
+      if (typeof value === 'number') {
+        return Number.isFinite(value);
+      }
+      if (typeof value !== 'string') {
+        return false;
+      }
+      const candidate = value.trim();
+      return candidate !== '' && /^[-+]?\d*(\.\d+)?$/.test(candidate);
+    }
+
+    function formatCpuQuantity(value) {
+      if (!isNumericLike(value)) {
+        return typeof value === 'string' && value.trim() !== '' ? value : '–';
+      }
+
+      const numeric = typeof value === 'number' ? value : Number.parseFloat(value.trim());
+      if (!Number.isFinite(numeric)) {
+        return '–';
+      }
+
+      if (numeric > 0 && numeric < 1) {
+        return `${Math.round(numeric * 1000)}m`;
+      }
+
+      return numeric % 1 === 0 ? numeric.toString(10) : numeric.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+    }
+
+    function formatMemoryQuantity(value) {
+      if (!isNumericLike(value)) {
+        return typeof value === 'string' && value.trim() !== '' ? value : '–';
+      }
+
+      const numeric = typeof value === 'number' ? value : Number.parseFloat(value.trim());
+      if (!Number.isFinite(numeric) || numeric < 0) {
+        return '–';
+      }
+
+      return formatBytes(numeric);
+    }
+
     function formatProbeLabel(probe) {
       if (!probe) {
         return 'Probe';
@@ -589,6 +680,25 @@
       setMetaValue('cluster-domain', environment?.clusterDomain ?? null);
     }
 
+    function updateResources(resources) {
+      setMetaValue('resource-request-cpu', formatCpuQuantity(resources?.requests?.cpu ?? null));
+      setMetaValue('resource-request-memory', formatMemoryQuantity(resources?.requests?.memory ?? null));
+      setMetaValue('resource-limit-cpu', formatCpuQuantity(resources?.limits?.cpu ?? null));
+      setMetaValue('resource-limit-memory', formatMemoryQuantity(resources?.limits?.memory ?? null));
+
+      const usage = resources?.usage ?? null;
+      const cpu = typeof usage?.cpuPercentAverageLastMinute === 'number'
+        ? `${usage.cpuPercentAverageLastMinute.toFixed(1)}%`
+        : '–';
+      setMetaValue('resource-usage-cpu', cpu);
+
+      const workingSet = formatBytes(usage?.workingSetBytes);
+      setMetaValue('resource-usage-working-set', workingSet);
+
+      const managed = formatBytes(usage?.managedMemoryBytes);
+      setMetaValue('resource-usage-managed', managed);
+    }
+
     function updateInstance(data) {
       document.getElementById('hostname').textContent = data.hostname ?? '–';
       document.getElementById('started').textContent = formatDate(data.startedAtUtc);
@@ -603,6 +713,7 @@
       }
 
       updateEnvironment(data.environment ?? null);
+      updateResources(data.resources ?? null);
     }
 
     function updateProbes(data) {

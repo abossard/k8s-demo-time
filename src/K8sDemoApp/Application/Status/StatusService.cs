@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -17,6 +19,13 @@ internal sealed class StatusService
     private readonly DateTimeOffset _startedAtUtc;
     private readonly string _hostname;
     private readonly InstanceEnvironmentInfo _environment;
+    private readonly ResourceCapacity _resourceRequests;
+    private readonly ResourceCapacity _resourceLimits;
+    private readonly Queue<CpuSample> _cpuSamples = new();
+    private readonly object _resourceLock = new();
+    private readonly Process _process;
+    private readonly int _processorCount;
+    private static readonly TimeSpan UsageWindow = TimeSpan.FromMinutes(1);
     private long _sequence;
 
     public StatusService(TimeProvider timeProvider, IProbeScheduler probes, IStressSupervisor stress)
@@ -27,12 +36,22 @@ internal sealed class StatusService
         _startedAtUtc = timeProvider.GetUtcNow();
         _hostname = Environment.MachineName;
         _environment = BuildEnvironment();
+        _resourceRequests = BuildCapacity("RESOURCE_REQUEST_CPU", "RESOURCE_REQUEST_MEMORY");
+        _resourceLimits = BuildCapacity("RESOURCE_LIMIT_CPU", "RESOURCE_LIMIT_MEMORY");
+        _processorCount = Math.Max(Environment.ProcessorCount, 1);
+        _process = Process.GetCurrentProcess();
+
+        lock (_resourceLock)
+        {
+            _cpuSamples.Enqueue(new CpuSample(_startedAtUtc, _process.TotalProcessorTime));
+        }
     }
 
     public InstanceStatusResponse GetStatus()
     {
         var now = _timeProvider.GetUtcNow();
         var sequence = Interlocked.Increment(ref _sequence);
+        var resources = GetResources(now);
         return new InstanceStatusResponse(
             sequence,
             _hostname,
@@ -40,6 +59,7 @@ internal sealed class StatusService
             now,
             now - _startedAtUtc,
             _environment,
+            resources,
             _probes.GetSnapshot(),
             _stress.GetSnapshot());
     }
@@ -85,10 +105,60 @@ internal sealed class StatusService
         return Array.Empty<string>();
     }
 
+    private InstanceResourcesInfo GetResources(DateTimeOffset timestamp)
+    {
+        var usage = CaptureResourceUsage(timestamp);
+        var requests = new ResourceCapacity(_resourceRequests.Cpu, _resourceRequests.Memory);
+        var limits = new ResourceCapacity(_resourceLimits.Cpu, _resourceLimits.Memory);
+        return new InstanceResourcesInfo(requests, limits, usage);
+    }
+
+    private InstanceResourceUsage CaptureResourceUsage(DateTimeOffset timestamp)
+    {
+        lock (_resourceLock)
+        {
+            _process.Refresh();
+            var workingSet = _process.WorkingSet64;
+            var managedMemory = GC.GetTotalMemory(false);
+            var cpuTime = _process.TotalProcessorTime;
+
+            _cpuSamples.Enqueue(new CpuSample(timestamp, cpuTime));
+
+            while (_cpuSamples.Count > 1 && timestamp - _cpuSamples.Peek().Timestamp > UsageWindow)
+            {
+                _cpuSamples.Dequeue();
+            }
+
+            double cpuPercent = 0;
+            if (_cpuSamples.Count > 1)
+            {
+                var oldest = _cpuSamples.Peek();
+                var elapsed = timestamp - oldest.Timestamp;
+                if (elapsed > TimeSpan.Zero)
+                {
+                    var cpuElapsed = (cpuTime - oldest.ProcessorTime).TotalMilliseconds;
+                    var elapsedMs = elapsed.TotalMilliseconds * _processorCount;
+                    if (elapsedMs > 0)
+                    {
+                        cpuPercent = Math.Clamp(cpuElapsed / elapsedMs * 100d, 0d, 100d);
+                    }
+                }
+            }
+
+            var roundedCpu = Math.Round(cpuPercent, 2, MidpointRounding.AwayFromZero);
+            return new InstanceResourceUsage(roundedCpu, workingSet, managedMemory);
+        }
+    }
+
     private static string? GetEnv(string key)
     {
         var value = Environment.GetEnvironmentVariable(key);
         return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static ResourceCapacity BuildCapacity(string cpuKey, string memoryKey)
+    {
+        return new ResourceCapacity(GetEnv(cpuKey), GetEnv(memoryKey));
     }
 
     private static string? CoalesceEnv(params string[] keys)
@@ -103,5 +173,18 @@ internal sealed class StatusService
         }
 
         return null;
+    }
+
+    private readonly struct CpuSample
+    {
+        public CpuSample(DateTimeOffset timestamp, TimeSpan processorTime)
+        {
+            Timestamp = timestamp;
+            ProcessorTime = processorTime;
+        }
+
+        public DateTimeOffset Timestamp { get; }
+
+        public TimeSpan ProcessorTime { get; }
     }
 }

@@ -9,6 +9,7 @@ public sealed record InstanceStatusResponse(
     DateTimeOffset CurrentTimeUtc,
     TimeSpan Uptime,
     InstanceEnvironmentInfo Environment,
+    InstanceResourcesInfo Resources,
     ProbeSnapshot Probes,
     StressSnapshot Stress);
 
@@ -23,3 +24,17 @@ public sealed record InstanceEnvironmentInfo(
     string? NodeIp,
     string? ClusterName,
     string? ClusterDomain);
+
+public sealed record InstanceResourcesInfo(
+    ResourceCapacity Requests,
+    ResourceCapacity Limits,
+    InstanceResourceUsage Usage);
+
+public sealed record ResourceCapacity(
+    string? Cpu,
+    string? Memory);
+
+public sealed record InstanceResourceUsage(
+    double CpuPercentAverageLastMinute,
+    long WorkingSetBytes,
+    long ManagedMemoryBytes);
