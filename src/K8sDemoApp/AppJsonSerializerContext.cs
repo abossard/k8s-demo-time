@@ -6,6 +6,7 @@ namespace K8sDemoApp;
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(InstanceStatusResponse))]
+[JsonSerializable(typeof(InstanceEnvironmentInfo))]
 [JsonSerializable(typeof(ProbeSnapshot))]
 [JsonSerializable(typeof(ProbeInfoDto))]
 [JsonSerializable(typeof(StressSnapshot))]

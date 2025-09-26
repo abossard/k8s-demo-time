@@ -237,6 +237,16 @@
     .meta-value {
       font-size: 1.05rem;
       font-weight: 600;
+      word-break: break-word;
+      white-space: normal;
+    }
+
+    .meta-value.multiline {
+      white-space: pre-line;
+    }
+
+    .meta-grid + .meta-grid {
+      margin-top: 0.75rem;
     }
 
     @media (max-width: 640px) {
@@ -281,6 +291,48 @@
           <div class="meta-item">
             <span class="meta-label">Last Updated</span>
             <span class="meta-value" id="last-updated">–</span>
+          </div>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">IP Addresses</span>
+            <div class="meta-value multiline" id="ip-addresses">–</div>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Pod Name</span>
+            <span class="meta-value" id="pod-name">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Pod Namespace</span>
+            <span class="meta-value" id="pod-namespace">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Pod UID</span>
+            <span class="meta-value" id="pod-uid">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Pod IP</span>
+            <span class="meta-value" id="pod-ip">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Service Account</span>
+            <span class="meta-value" id="pod-service-account">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Node Name</span>
+            <span class="meta-value" id="node-name">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Node IP</span>
+            <span class="meta-value" id="node-ip">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Cluster Name</span>
+            <span class="meta-value" id="cluster-name">–</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Cluster Domain</span>
+            <span class="meta-value" id="cluster-domain">–</span>
           </div>
         </div>
       </div>
@@ -503,6 +555,40 @@
       return Math.abs(hash) % 360;
     }
 
+    function setMetaValue(id, value) {
+      const el = document.getElementById(id);
+      if (!el) {
+        return;
+      }
+
+      if (value === null || value === undefined || value === '') {
+        el.textContent = '–';
+      } else {
+        el.textContent = value;
+      }
+    }
+
+    function updateEnvironment(environment) {
+      const ipEl = document.getElementById('ip-addresses');
+      if (ipEl) {
+        if (environment && Array.isArray(environment.ipAddresses) && environment.ipAddresses.length > 0) {
+          ipEl.textContent = environment.ipAddresses.join('\n');
+        } else {
+          ipEl.textContent = '–';
+        }
+      }
+
+      setMetaValue('pod-name', environment?.podName ?? null);
+      setMetaValue('pod-namespace', environment?.podNamespace ?? null);
+      setMetaValue('pod-uid', environment?.podUid ?? null);
+      setMetaValue('pod-ip', environment?.podIp ?? null);
+      setMetaValue('pod-service-account', environment?.serviceAccountName ?? null);
+      setMetaValue('node-name', environment?.nodeName ?? null);
+      setMetaValue('node-ip', environment?.nodeIp ?? null);
+      setMetaValue('cluster-name', environment?.clusterName ?? null);
+      setMetaValue('cluster-domain', environment?.clusterDomain ?? null);
+    }
+
     function updateInstance(data) {
       document.getElementById('hostname').textContent = data.hostname ?? '–';
       document.getElementById('started').textContent = formatDate(data.startedAtUtc);
@@ -515,6 +601,8 @@
           uptime: formatDuration(data.uptime)
         });
       }
+
+      updateEnvironment(data.environment ?? null);
     }
 
     function updateProbes(data) {
