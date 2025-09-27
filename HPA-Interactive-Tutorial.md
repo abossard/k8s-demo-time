@@ -7,6 +7,17 @@
 
 ## Lab Flow
 
+```mermaid
+flowchart TD
+	A["1️⃣ Verify Environment<br/>- Metrics server healthy<br/>- Base workload ready"] --> B["2️⃣ Create CPU HPA<br/>- Apply CPU target<br/>- Observe scaling"]
+	B --> C["3️⃣ Add Memory Metrics<br/>- Patch HPA<br/>- Simulate memory load"]
+	C --> D["4️⃣ Introduce Custom Metrics<br/>- Enable adapter<br/>- Update HPA"]
+	D --> E["5️⃣ Tune Behavior Policies<br/>- Adjust scale up/down<br/>- Compare outcomes"]
+	E --> F["6️⃣ Wrap-Up & Cleanup<br/>- Review signals<br/>- Delete resources"]
+
+	F -.-> X["Optional Extensions<br/>• Pair with VPA<br/>• Add PDBs<br/>• Stress node pool"]
+```
+
 ### 1. Verify Environment (15 min)
 - Confirm metrics server is healthy with `kubectl get deployment metrics-server -n kube-system`.
 - Deploy the base workload from `k8s/hpa/step-01-base-workload.yaml` and ensure two pods reach `Ready` state.
