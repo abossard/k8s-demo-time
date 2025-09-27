@@ -161,6 +161,16 @@
       border: 1px solid var(--host-color-border);
     }
 
+    .status-error {
+      font-size: 0.9rem;
+      color: rgba(226, 232, 240, 0.6);
+      word-break: break-word;
+    }
+
+    .status-error.has-error {
+      color: #f87171;
+    }
+
     .status-chip {
       display: inline-flex;
       align-items: center;
@@ -436,6 +446,7 @@
         <div><strong>Active:</strong> <span id="cpu-active">no</span></div>
         <div><strong>Threads:</strong> <span id="cpu-threads">0</span></div>
         <div><strong>Ends:</strong> <span id="cpu-ends">–</span></div>
+        <div><strong>Last error:</strong> <span id="cpu-error" class="status-error">–</span></div>
       </div>
       <div class="flex" style="margin-top: 0.75rem;">
         <label>Minutes
@@ -455,6 +466,7 @@
         <div><strong>Active:</strong> <span id="memory-active">no</span></div>
         <div><strong>Target MB:</strong> <span id="memory-target">0</span></div>
         <div><strong>Ends:</strong> <span id="memory-ends">–</span></div>
+        <div><strong>Last error:</strong> <span id="memory-error" class="status-error">–</span></div>
       </div>
       <div class="flex" style="margin-top: 0.75rem;">
         <label>Minutes
@@ -504,17 +516,32 @@
     }
 
     let currentHostKey = null;
+    let notificationState = { message: '', isError: false };
 
     function setNotification(message, isError = false) {
-      if (!message) {
+      const normalized = typeof message === 'string'
+        ? message.trim()
+        : message
+          ? String(message).trim()
+          : '';
+      const nextMessage = normalized;
+      const nextIsError = Boolean(nextMessage && isError);
+
+      if (notificationState.message === nextMessage && notificationState.isError === nextIsError) {
+        return;
+      }
+
+      notificationState = { message: nextMessage, isError: nextIsError };
+
+      if (!nextMessage) {
         notificationEl.textContent = '';
         notificationEl.style.color = '';
         return;
       }
 
-      notificationEl.textContent = message;
-      notificationEl.style.color = isError ? '#f87171' : '#86efac';
-      logEvent(isError ? 'error' : 'success', message);
+      notificationEl.textContent = nextMessage;
+      notificationEl.style.color = nextIsError ? '#f87171' : '#86efac';
+      logEvent(nextIsError ? 'error' : 'success', nextMessage);
     }
 
     function formatDate(value) {
@@ -800,6 +827,17 @@
       document.getElementById('cpu-threads').textContent = cpu.threadCount ?? 0;
       const ends = cpu.active ? cpu.expectedCompletionUtc : cpu.completedAtUtc;
       document.getElementById('cpu-ends').textContent = ends ? formatDate(ends) : '–';
+      const errorEl = document.getElementById('cpu-error');
+      if (errorEl) {
+        const error = typeof cpu.lastError === 'string' ? cpu.lastError.trim() : '';
+        if (error) {
+          errorEl.textContent = error;
+          errorEl.classList.add('has-error');
+        } else {
+          errorEl.textContent = '–';
+          errorEl.classList.remove('has-error');
+        }
+      }
     }
 
     function updateMemory(data) {
@@ -808,6 +846,17 @@
       document.getElementById('memory-target').textContent = memory.targetMegabytes ?? 0;
       const ends = memory.active ? memory.expectedCompletionUtc : memory.completedAtUtc;
       document.getElementById('memory-ends').textContent = ends ? formatDate(ends) : '–';
+      const errorEl = document.getElementById('memory-error');
+      if (errorEl) {
+        const error = typeof memory.lastError === 'string' ? memory.lastError.trim() : '';
+        if (error) {
+          errorEl.textContent = error;
+          errorEl.classList.add('has-error');
+        } else {
+          errorEl.textContent = '–';
+          errorEl.classList.remove('has-error');
+        }
+      }
     }
 
     async function postJson(url, payload) {
@@ -1001,7 +1050,21 @@
       updateProbes(data);
       updateCpu(data);
       updateMemory(data);
-      setNotification('');
+      const cpuError = data?.stress?.cpu?.lastError;
+      const memoryError = data?.stress?.memory?.lastError;
+      const messages = [];
+      if (cpuError) {
+        messages.push(`CPU: ${cpuError}`);
+      }
+      if (memoryError) {
+        messages.push(`Memory: ${memoryError}`);
+      }
+
+      if (messages.length > 0) {
+        setNotification(messages.join(' | '), true);
+      } else {
+        setNotification('');
+      }
     }
 
     function connectStream() {

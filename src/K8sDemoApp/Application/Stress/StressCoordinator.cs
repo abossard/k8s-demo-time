@@ -52,21 +52,35 @@ internal sealed class StressCoordinator : IStressSupervisor
 
             var now = _timeProvider.GetUtcNow();
             var expected = now.Add(duration);
-            var cts = new CancellationTokenSource();
-            var token = cts.Token;
-            var tasks = new Task[threads];
+            CancellationTokenSource? cts = null;
 
-            for (var i = 0; i < threads; i++)
+            try
             {
-                tasks[i] = Task.Factory.StartNew(() => CpuWorker(token), token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-            }
+                cts = new CancellationTokenSource();
+                var token = cts.Token;
+                var tasks = new Task[threads];
 
-            var run = new CpuRun(now, expected, threads, cts, tasks);
-            _cpuRun = run;
-            _cpuSnapshot = new StressWorkloadStatus("cpu", true, now, expected, null, threads, null, null);
-            _ = MonitorCpuAsync(run, duration);
-            notify = true;
-            result = StressStartResult.Successful(_cpuSnapshot);
+                for (var i = 0; i < threads; i++)
+                {
+                    tasks[i] = Task.Factory.StartNew(() => CpuWorker(token), token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                }
+
+                var run = new CpuRun(now, expected, threads, cts, tasks);
+                _cpuRun = run;
+                _cpuSnapshot = new StressWorkloadStatus("cpu", true, now, expected, null, threads, null, null);
+                _ = MonitorCpuAsync(run, duration);
+                notify = true;
+                result = StressStartResult.Successful(_cpuSnapshot);
+            }
+            catch (Exception ex)
+            {
+                cts?.Cancel();
+                cts?.Dispose();
+
+                var message = $"Failed to start CPU stress: {ex.Message}";
+                notify |= StopCpuLocked(message);
+                result = StressStartResult.Failure(message, _cpuSnapshot);
+            }
         }
 
         if (notify)
@@ -123,23 +137,33 @@ internal sealed class StressCoordinator : IStressSupervisor
                     TouchPages(buffer);
                     blocks.Add(buffer);
                 }
+
+                var now = _timeProvider.GetUtcNow();
+                var expected = now.Add(duration);
+                var cts = new CancellationTokenSource();
+                var run = new MemoryRun(now, expected, megabytes, cts, blocks);
+                _memoryRun = run;
+                _memorySnapshot = new StressWorkloadStatus("memory", true, now, expected, null, null, megabytes, null);
+                _ = MonitorMemoryAsync(run, duration);
+                notify = true;
+                result = StressStartResult.Successful(_memorySnapshot);
             }
             catch (OutOfMemoryException)
             {
                 blocks.Clear();
                 GC.Collect();
-                return StressStartResult.Failure("Unable to allocate requested memory. Try a smaller value.", _memorySnapshot);
+                const string message = "Unable to allocate requested memory. Try a smaller value.";
+                notify |= StopMemoryLocked(message);
+                result = StressStartResult.Failure(message, _memorySnapshot);
             }
-
-            var now = _timeProvider.GetUtcNow();
-            var expected = now.Add(duration);
-            var cts = new CancellationTokenSource();
-            var run = new MemoryRun(now, expected, megabytes, cts, blocks);
-            _memoryRun = run;
-            _memorySnapshot = new StressWorkloadStatus("memory", true, now, expected, null, null, megabytes, null);
-            _ = MonitorMemoryAsync(run, duration);
-            notify = true;
-            result = StressStartResult.Successful(_memorySnapshot);
+            catch (Exception ex)
+            {
+                blocks.Clear();
+                GC.Collect();
+                var message = $"Failed to start memory stress: {ex.Message}";
+                notify |= StopMemoryLocked(message);
+                result = StressStartResult.Failure(message, _memorySnapshot);
+            }
         }
 
         if (notify)
