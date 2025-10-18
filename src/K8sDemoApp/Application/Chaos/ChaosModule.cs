@@ -74,14 +74,14 @@ internal static class ChaosModule
             
             if (broadcastResult.SuccessfulPods > 0)
             {
-                return Results.Json(new 
-                { 
-                    message = $"Application frozen on {broadcastResult.SuccessfulPods} of {broadcastResult.TotalPods} pods",
-                    totalPods = broadcastResult.TotalPods,
-                    successfulPods = broadcastResult.SuccessfulPods,
-                    failedPods = broadcastResult.FailedPods,
-                    errors = broadcastResult.Errors
-                }, AppJsonSerializerContext.Default.Options);
+                var response = new BroadcastResponse(
+                    $"Application frozen on {broadcastResult.SuccessfulPods} of {broadcastResult.TotalPods} pods",
+                    broadcastResult.TotalPods,
+                    broadcastResult.SuccessfulPods,
+                    broadcastResult.FailedPods,
+                    broadcastResult.Errors
+                );
+                return Results.Json(response, AppJsonSerializerContext.Default.BroadcastResponse);
             }
             
             return Results.Json(new ApiError($"Failed to freeze any pods. Errors: {string.Join("; ", broadcastResult.Errors)}"), 

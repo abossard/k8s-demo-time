@@ -20,5 +20,6 @@ namespace K8sDemoApp;
 [JsonSerializable(typeof(FreezeRequest))]
 [JsonSerializable(typeof(ApiError))]
 [JsonSerializable(typeof(ApiMessage))]
+[JsonSerializable(typeof(BroadcastResponse))]
 [JsonSerializable(typeof(HealthPayload))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext;

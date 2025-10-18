@@ -57,14 +57,14 @@ internal static class StressModule
             
             if (broadcastResult.SuccessfulPods > 0)
             {
-                return Results.Json(new 
-                { 
-                    message = $"CPU stress started on {broadcastResult.SuccessfulPods} of {broadcastResult.TotalPods} pods",
-                    totalPods = broadcastResult.TotalPods,
-                    successfulPods = broadcastResult.SuccessfulPods,
-                    failedPods = broadcastResult.FailedPods,
-                    errors = broadcastResult.Errors
-                }, AppJsonSerializerContext.Default.Options);
+                var response = new BroadcastResponse(
+                    $"CPU stress started on {broadcastResult.SuccessfulPods} of {broadcastResult.TotalPods} pods",
+                    broadcastResult.TotalPods,
+                    broadcastResult.SuccessfulPods,
+                    broadcastResult.FailedPods,
+                    broadcastResult.Errors
+                );
+                return Results.Json(response, AppJsonSerializerContext.Default.BroadcastResponse);
             }
             
             return WriteError($"Failed to start CPU stress on any pods. Errors: {string.Join("; ", broadcastResult.Errors)}");
@@ -115,14 +115,14 @@ internal static class StressModule
             
             if (broadcastResult.SuccessfulPods > 0)
             {
-                return Results.Json(new 
-                { 
-                    message = $"Memory stress started on {broadcastResult.SuccessfulPods} of {broadcastResult.TotalPods} pods",
-                    totalPods = broadcastResult.TotalPods,
-                    successfulPods = broadcastResult.SuccessfulPods,
-                    failedPods = broadcastResult.FailedPods,
-                    errors = broadcastResult.Errors
-                }, AppJsonSerializerContext.Default.Options);
+                var response = new BroadcastResponse(
+                    $"Memory stress started on {broadcastResult.SuccessfulPods} of {broadcastResult.TotalPods} pods",
+                    broadcastResult.TotalPods,
+                    broadcastResult.SuccessfulPods,
+                    broadcastResult.FailedPods,
+                    broadcastResult.Errors
+                );
+                return Results.Json(response, AppJsonSerializerContext.Default.BroadcastResponse);
             }
             
             return WriteError($"Failed to start memory stress on any pods. Errors: {string.Join("; ", broadcastResult.Errors)}");
