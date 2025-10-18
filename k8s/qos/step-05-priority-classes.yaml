@@ -1,0 +1,148 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qos-demo
+---
+# Pod with Priority Class for additional eviction control
+# Combined with QoS for fine-grained priority
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+  annotations:
+    tutorial.k8s-demo/description: "High priority for critical workloads"
+value: 1000000
+globalDefault: false
+description: "High priority pods - protected from eviction"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: medium-priority
+  annotations:
+    tutorial.k8s-demo/description: "Medium priority for standard workloads"
+value: 500000
+globalDefault: false
+description: "Medium priority pods"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority
+  annotations:
+    tutorial.k8s-demo/description: "Low priority for non-critical workloads"
+value: 100000
+globalDefault: false
+description: "Low priority pods - evicted first"
+---
+# High Priority + Guaranteed QoS = Maximum protection
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: critical-app
+  namespace: qos-demo
+  labels:
+    app: critical-app
+    priority: high
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: critical-app
+  template:
+    metadata:
+      labels:
+        app: critical-app
+        priority: high
+    spec:
+      priorityClassName: high-priority
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+---
+# Low Priority + BestEffort QoS = First to be evicted
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: background-job
+  namespace: qos-demo
+  labels:
+    app: background-job
+    priority: low
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: background-job
+  template:
+    metadata:
+      labels:
+        app: background-job
+        priority: low
+    spec:
+      priorityClassName: low-priority
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: http
+              containerPort: 8080
+          # No resources = BestEffort
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10

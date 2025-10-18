@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: autoscaling-demo
+---
+# Deployment with Burstable QoS and VPA
+# This demonstrates memory-based vertical scaling with burstable resources
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-burstable
+  namespace: autoscaling-demo
+  labels:
+    app: backend
+    tier: burstable
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+      tier: burstable
+  template:
+    metadata:
+      labels:
+        app: backend
+        tier: burstable
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.cpu
+                  divisor: "1"
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.memory
+                  divisor: "1Mi"
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+---
+# VPA for memory-based vertical scaling
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: backend-burstable-vpa
+  namespace: autoscaling-demo
+  labels:
+    app: backend
+  annotations:
+    demo.k8s/description: "VPA adjusts memory requests based on usage patterns"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend-burstable
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: k8s-demo-app
+        controlledResources:
+          - memory
+        minAllowed:
+          cpu: "100m"
+          memory: "128Mi"
+        maxAllowed:
+          cpu: "1"
+          memory: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-burstable
+  namespace: autoscaling-demo
+spec:
+  selector:
+    app: backend
+    tier: burstable
+  ports:
+    - port: 80
+      targetPort: http
+  type: ClusterIP
