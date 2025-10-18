@@ -1,6 +1,7 @@
 using System.Globalization;
 using K8sDemoApp;
 using K8sDemoApp.Application.Common;
+using K8sDemoApp.Application.Coordination;
 using K8sDemoApp.Application.Status;
 using K8sDemoApp.Models;
 using Microsoft.AspNetCore.Builder;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace K8sDemoApp.Application.Probes;
 
@@ -40,7 +42,7 @@ internal static class ProbeModule
         return endpoints;
     }
 
-    private static IResult HandleProbeDown(string probe, ScheduleDowntimeRequest request, IProbeScheduler probes, IStatusStream statusStream)
+    private static async Task<IResult> HandleProbeDown(string probe, ScheduleDowntimeRequest request, IProbeScheduler probes, IStatusStream statusStream, IPodCoordinator coordinator, ILoggerFactory loggerFactory)
     {
         if (!ProbeRoute.TryParse(probe, out var probeType))
         {
@@ -52,18 +54,79 @@ internal static class ProbeModule
             return WriteError(error);
         }
 
+        // If broadcast is requested, coordinate with other pods
+        if (request.BroadcastToAll == true)
+        {
+            var logger = loggerFactory.CreateLogger("ProbeModule");
+            logger.LogInformation("Broadcasting probe downtime to all pods. Probe: {Probe}, Duration: {Duration}", probe, duration);
+            
+            // Create a non-broadcast version of the request to send to other pods
+            var localRequest = request with { BroadcastToAll = false };
+            var broadcastResult = await coordinator.BroadcastToAllPodsAsync($"/api/probes/{probe}/down", localRequest);
+            
+            logger.LogInformation("Probe downtime broadcast complete. Success: {Success}/{Total}, Failed: {Failed}", 
+                broadcastResult.SuccessfulPods, broadcastResult.TotalPods, broadcastResult.FailedPods);
+            
+            if (broadcastResult.SuccessfulPods > 0)
+            {
+                return Results.Json(new 
+                { 
+                    message = $"Probe {probe} taken down on {broadcastResult.SuccessfulPods} of {broadcastResult.TotalPods} pods",
+                    totalPods = broadcastResult.TotalPods,
+                    successfulPods = broadcastResult.SuccessfulPods,
+                    failedPods = broadcastResult.FailedPods,
+                    errors = broadcastResult.Errors
+                }, AppJsonSerializerContext.Default.Options);
+            }
+            
+            return WriteError($"Failed to take probe down on any pods. Errors: {string.Join("; ", broadcastResult.Errors)}");
+        }
+
+        // Normal single-pod execution
         var snapshot = probes.ScheduleDowntime(probeType, duration);
         statusStream.Publish();
         return Results.Json(snapshot, AppJsonSerializerContext.Default.ProbeInfoDto);
     }
 
-    private static IResult HandleProbeUp(string probe, IProbeScheduler probes, IStatusStream statusStream)
+    private static async Task<IResult> HandleProbeUp(string probe, IProbeScheduler probes, IStatusStream statusStream, IPodCoordinator coordinator, ILoggerFactory loggerFactory, HttpContext context)
     {
         if (!ProbeRoute.TryParse(probe, out var probeType))
         {
             return WriteError($"Unknown probe '{probe}'.");
         }
 
+        // Check if broadcastToAll is in query string or body
+        var broadcastToAll = context.Request.Query.ContainsKey("broadcastToAll") 
+            ? bool.TryParse(context.Request.Query["broadcastToAll"], out var val) && val
+            : false;
+
+        // If broadcast is requested, coordinate with other pods
+        if (broadcastToAll)
+        {
+            var logger = loggerFactory.CreateLogger("ProbeModule");
+            logger.LogInformation("Broadcasting probe restore to all pods. Probe: {Probe}", probe);
+            
+            var broadcastResult = await coordinator.BroadcastToAllPodsAsync($"/api/probes/{probe}/up", new { });
+            
+            logger.LogInformation("Probe restore broadcast complete. Success: {Success}/{Total}, Failed: {Failed}", 
+                broadcastResult.SuccessfulPods, broadcastResult.TotalPods, broadcastResult.FailedPods);
+            
+            if (broadcastResult.SuccessfulPods > 0)
+            {
+                return Results.Json(new 
+                { 
+                    message = $"Probe {probe} restored on {broadcastResult.SuccessfulPods} of {broadcastResult.TotalPods} pods",
+                    totalPods = broadcastResult.TotalPods,
+                    successfulPods = broadcastResult.SuccessfulPods,
+                    failedPods = broadcastResult.FailedPods,
+                    errors = broadcastResult.Errors
+                }, AppJsonSerializerContext.Default.Options);
+            }
+            
+            return WriteError($"Failed to restore probe on any pods. Errors: {string.Join("; ", broadcastResult.Errors)}");
+        }
+
+        // Normal single-pod execution
         var snapshot = probes.Restore(probeType);
         statusStream.Publish();
         return Results.Json(snapshot, AppJsonSerializerContext.Default.ProbeInfoDto);

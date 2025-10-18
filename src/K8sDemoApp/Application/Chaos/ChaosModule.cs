@@ -3,11 +3,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using K8sDemoApp;
 using K8sDemoApp.Application.Common;
+using K8sDemoApp.Application.Coordination;
 using K8sDemoApp.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace K8sDemoApp.Application.Chaos;
 
@@ -50,13 +52,43 @@ internal static class ChaosModule
         return Results.Json(new ApiMessage("Crash scheduled. Container will terminate momentarily."), AppJsonSerializerContext.Default.ApiMessage);
     }
 
-    private static IResult TriggerFreeze(FreezeRequest request, IAppFreezer freezer)
+    private static async Task<IResult> TriggerFreeze(FreezeRequest request, IAppFreezer freezer, IPodCoordinator coordinator, ILoggerFactory loggerFactory)
     {
         if (!RequestValidators.TryGetDurationInMinutes(request.Minutes, MaxFreezeMinutes, out var duration, out var error))
         {
             return Results.Json(new ApiError(error), AppJsonSerializerContext.Default.ApiError, statusCode: StatusCodes.Status400BadRequest);
         }
 
+        // If broadcast is requested, coordinate with other pods
+        if (request.BroadcastToAll == true)
+        {
+            var logger = loggerFactory.CreateLogger("ChaosModule");
+            logger.LogInformation("Broadcasting freeze to all pods. Duration: {Duration}", duration);
+            
+            // Create a non-broadcast version of the request to send to other pods
+            var localRequest = request with { BroadcastToAll = false };
+            var broadcastResult = await coordinator.BroadcastToAllPodsAsync("/api/chaos/freeze", localRequest);
+            
+            logger.LogInformation("Freeze broadcast complete. Success: {Success}/{Total}, Failed: {Failed}", 
+                broadcastResult.SuccessfulPods, broadcastResult.TotalPods, broadcastResult.FailedPods);
+            
+            if (broadcastResult.SuccessfulPods > 0)
+            {
+                return Results.Json(new 
+                { 
+                    message = $"Application frozen on {broadcastResult.SuccessfulPods} of {broadcastResult.TotalPods} pods",
+                    totalPods = broadcastResult.TotalPods,
+                    successfulPods = broadcastResult.SuccessfulPods,
+                    failedPods = broadcastResult.FailedPods,
+                    errors = broadcastResult.Errors
+                }, AppJsonSerializerContext.Default.Options);
+            }
+            
+            return Results.Json(new ApiError($"Failed to freeze any pods. Errors: {string.Join("; ", broadcastResult.Errors)}"), 
+                AppJsonSerializerContext.Default.ApiError, statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        // Normal single-pod execution
         freezer.Freeze(duration);
 
         var message = duration.TotalMinutes >= 1
