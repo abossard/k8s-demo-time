@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qos-demo
+---
+# BestEffort QoS Class - no requests or limits specified
+# Lowest priority, evicted first under memory pressure
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: besteffort-qos
+  namespace: qos-demo
+  labels:
+    app: besteffort-qos
+    qos-class: besteffort
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: besteffort-qos
+  template:
+    metadata:
+      labels:
+        app: besteffort-qos
+        qos-class: besteffort
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: http
+              containerPort: 8080
+          # No resources specified = BestEffort QoS
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: besteffort-qos
+  namespace: qos-demo
+  labels:
+    app: besteffort-qos
+spec:
+  selector:
+    app: besteffort-qos
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP

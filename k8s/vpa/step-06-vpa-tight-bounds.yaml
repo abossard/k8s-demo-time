@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vpa-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-demo-app-vpa
+  namespace: vpa-demo
+  labels:
+    app: k8s-demo-app-vpa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-demo-app-vpa
+  template:
+    metadata:
+      labels:
+        app: k8s-demo-app-vpa
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.memory
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: k8s-demo-app-vpa
+  namespace: vpa-demo
+  labels:
+    app: k8s-demo-app-vpa
+  annotations:
+    tutorial.k8s-demo/lesson: "06-vpa-tight-bounds"
+    tutorial.k8s-demo/description: "VPA with tight resource bounds to demonstrate constraint enforcement"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: k8s-demo-app-vpa
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: k8s-demo-app
+        controlledResources:
+          - cpu
+          - memory
+        minAllowed:
+          cpu: "200m"
+          memory: "256Mi"
+        maxAllowed:
+          cpu: "500m"
+          memory: "512Mi"

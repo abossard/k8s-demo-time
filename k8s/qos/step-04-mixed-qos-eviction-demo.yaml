@@ -1,0 +1,238 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: qos-demo
+---
+# Mixed QoS deployment demonstrating eviction priority under memory pressure
+# Deploy all three QoS classes side by side
+---
+# BestEffort QoS - Evicted FIRST (lowest priority)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: besteffort-qos
+  namespace: qos-demo
+  labels:
+    app: besteffort-qos
+    qos-class: besteffort
+    eviction-priority: "3-first"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: besteffort-qos
+  template:
+    metadata:
+      labels:
+        app: besteffort-qos
+        qos-class: besteffort
+        eviction-priority: "3-first"
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: http
+              containerPort: 8080
+          # No resources = BestEffort
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+---
+# Burstable QoS - Evicted SECOND (medium priority)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: burstable-qos
+  namespace: qos-demo
+  labels:
+    app: burstable-qos
+    qos-class: burstable
+    eviction-priority: "2-second"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: burstable-qos
+  template:
+    metadata:
+      labels:
+        app: burstable-qos
+        qos-class: burstable
+        eviction-priority: "2-second"
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+---
+# Guaranteed QoS - Evicted LAST (highest priority)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guaranteed-qos
+  namespace: qos-demo
+  labels:
+    app: guaranteed-qos
+    qos-class: guaranteed
+    eviction-priority: "1-last"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: guaranteed-qos
+  template:
+    metadata:
+      labels:
+        app: guaranteed-qos
+        qos-class: guaranteed
+        eviction-priority: "1-last"
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+---
+# Services for each QoS class
+apiVersion: v1
+kind: Service
+metadata:
+  name: besteffort-qos
+  namespace: qos-demo
+spec:
+  selector:
+    app: besteffort-qos
+  ports:
+    - port: 80
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: burstable-qos
+  namespace: qos-demo
+spec:
+  selector:
+    app: burstable-qos
+  ports:
+    - port: 80
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guaranteed-qos
+  namespace: qos-demo
+spec:
+  selector:
+    app: guaranteed-qos
+  ports:
+    - port: 80
+      targetPort: http
