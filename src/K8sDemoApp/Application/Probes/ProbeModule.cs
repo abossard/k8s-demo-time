@@ -106,6 +106,7 @@ internal static class ProbeModule
             var logger = loggerFactory.CreateLogger("ProbeModule");
             logger.LogInformation("Broadcasting probe restore to all pods. Probe: {Probe}", probe);
             
+            // Note: Using empty object since /up endpoint doesn't require a request body
             var broadcastResult = await coordinator.BroadcastToAllPodsAsync($"/api/probes/{probe}/up", new { });
             
             logger.LogInformation("Probe restore broadcast complete. Success: {Success}/{Total}, Failed: {Failed}", 
