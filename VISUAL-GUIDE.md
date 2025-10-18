@@ -39,7 +39,7 @@
 │  │  │  Pod: Burstable QoS + VPA (Standard Backend)                  │  ││
 │  │  │  ┌─────────────────────────────────────────┐                  │  ││
 │  │  │  │ Requests: 200m CPU, 256Mi Memory        │                  │  ││
-│  │  │  │ Limits:   1 CPU, 1Gi Memory             │ ← Different = Burstable││
+│  │  │  │ Limits:   1 CPU, 1Gi Memory             │ ← Limits > Requests = Burstable││
 │  │  │  │ Priority: Medium (500000)               │                  │  ││
 │  │  │  │ Replicas: 3 (fixed)                     │                  │  ││
 │  │  │  │ Resources adjusted by VPA               │ ← VPA adjusts   │  ││
