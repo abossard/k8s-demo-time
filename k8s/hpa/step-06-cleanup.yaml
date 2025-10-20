@@ -8,11 +8,18 @@ items:
     kind: HorizontalPodAutoscaler
     metadata:
       name: k8s-demo-app
+      namespace: hpa-demo
   - apiVersion: apps/v1
     kind: Deployment
     metadata:
       name: k8s-demo-app
+      namespace: hpa-demo
   - apiVersion: v1
     kind: Service
     metadata:
       name: k8s-demo-app
+      namespace: hpa-demo
+  - apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: hpa-demo

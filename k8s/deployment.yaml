@@ -22,7 +22,7 @@ spec:
             - name: ASPNETCORE_URLS
               value: http://+:8080
             - name: HOLD_STARTUP_SECONDS
-              value: "30"
+              value: "5"
             - name: POD_NAME
               valueFrom:
                 fieldRef:

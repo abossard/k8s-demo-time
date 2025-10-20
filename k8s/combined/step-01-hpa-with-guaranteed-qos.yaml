@@ -140,3 +140,21 @@ spec:
     - port: 80
       targetPort: http
   type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-demo-app-headless
+  namespace: autoscaling-demo
+  labels:
+    app: frontend
+    tier: guaranteed
+spec:
+  clusterIP: None
+  selector:
+    app: frontend
+    tier: guaranteed
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

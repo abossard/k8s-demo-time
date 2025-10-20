@@ -3,7 +3,7 @@
 ## Audience & Prereqs
 - Comfortable with `kubectl`, Deployments, and Services
 - Metrics server installed and ready to scrape cluster metrics
-- Access to the demo app namespace with ability to deploy manifests
+- Access to deploy manifests and create the `hpa-demo` namespace
 
 ## Lab Flow
 
@@ -21,10 +21,16 @@ flowchart TD
 ### 1. Verify Environment (15 min)
 - Confirm metrics server is healthy with `kubectl get deployment metrics-server -n kube-system`.
 - Deploy the base workload from `k8s/hpa/step-01-base-workload.yaml` and ensure two pods reach `Ready` state.
-- Open the dashboard (`kubectl port-forward svc/k8s-demo-app 8080:80`) to monitor live metrics.
+- Open the dashboard (`kubectl port-forward svc/k8s-demo-app 8080:80 -n hpa-demo`) to monitor live metrics.
 
 ```bash
 kubectl apply -f k8s/hpa/step-01-base-workload.yaml
+
+# Verify pods are running
+kubectl get pods -n hpa-demo -l app=k8s-demo-app
+
+# Check initial resource usage
+kubectl top pods -n hpa-demo
 ```
 
 ### 2. Create a CPU Target HPA (25 min)
@@ -34,7 +40,16 @@ kubectl apply -f k8s/hpa/step-01-base-workload.yaml
 
 ```bash
 kubectl apply -f k8s/hpa/step-02-hpa-cpu.yaml
-kubectl describe hpa k8s-demo-app
+
+# Check HPA status and current metrics
+kubectl get hpa k8s-demo-app -n hpa-demo
+kubectl describe hpa k8s-demo-app -n hpa-demo
+
+# Monitor scaling events
+kubectl get events -n hpa-demo --field-selector involvedObject.name=k8s-demo-app
+
+# Watch HPA and pods during load test
+kubectl get hpa,pods -n hpa-demo -w
 ```
 
 ### 3. Add Memory Metrics (20 min)
@@ -44,7 +59,16 @@ kubectl describe hpa k8s-demo-app
 
 ```bash
 kubectl apply -f k8s/hpa/step-03-hpa-cpu-memory.yaml
-kubectl get hpa k8s-demo-app -w
+
+# Compare HPA configurations
+kubectl get hpa k8s-demo-app -n hpa-demo -o yaml | grep -A 10 metrics
+
+# Monitor both CPU and memory metrics
+kubectl top pods -n hpa-demo --containers
+kubectl describe hpa k8s-demo-app -n hpa-demo
+
+# Watch scaling behavior with dual metrics
+kubectl get hpa k8s-demo-app -w -n hpa-demo
 ```
 
 ### 4. Introduce Custom Metrics (30 min)
@@ -54,7 +78,17 @@ kubectl get hpa k8s-demo-app -w
 
 ```bash
 kubectl apply -f k8s/hpa/step-04-hpa-custom-metric.yaml
+
+# Verify custom metrics API availability
+kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1" | jq .
 kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1" | grep http_server_active_requests
+
+# Check all three metric types in HPA
+kubectl get hpa k8s-demo-app -n hpa-demo -o jsonpath='{.spec.metrics[*].type}'
+kubectl describe hpa k8s-demo-app -n hpa-demo | grep -A 5 "Metrics:"
+
+# Monitor custom metric values during load
+watch 'kubectl describe hpa k8s-demo-app -n hpa-demo | grep -A 10 "Current metrics"'
 ```
 
 ### 5. Tune Behavior Policies (20 min)
@@ -63,15 +97,38 @@ kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1" | grep http_server_activ
 
 ```bash
 kubectl apply -f k8s/hpa/step-05-hpa-behavior.yaml
-kubectl describe hpa k8s-demo-app
+
+# Examine behavior policies
+kubectl get hpa k8s-demo-app -n hpa-demo -o jsonpath='{.spec.behavior}' | jq .
+kubectl describe hpa k8s-demo-app -n hpa-demo | grep -A 15 "Behavior:"
+
+# Track scaling events with timestamps
+kubectl get events -n hpa-demo --field-selector involvedObject.name=k8s-demo-app --sort-by='.firstTimestamp'
+
+# Monitor stabilization windows in action
+kubectl get hpa k8s-demo-app -n hpa-demo -o custom-columns=NAME:.metadata.name,REPLICAS:.status.currentReplicas,TARGETS:.status.currentMetrics[*].resource.current.averageUtilization -w
 ```
 
 ### 6. Wrap-Up & Cleanup (10 min)
-- Review `kubectl get hpa -w` output and identify key signals for production monitoring.
-- Remove tutorial resources, leaving the cluster in the original state.
+- Review `kubectl get hpa -w -n hpa-demo` output and identify key signals for production monitoring.
+- Remove tutorial resources including the `hpa-demo` namespace, leaving the cluster in the original state.
 
 ```bash
+# Review final HPA state and history
+kubectl describe hpa k8s-demo-app -n hpa-demo
+kubectl get events -n hpa-demo --field-selector involvedObject.kind=HorizontalPodAutoscaler
+
+# Check final resource usage
+kubectl top pods -n hpa-demo
+
+# Export HPA configuration for reference
+kubectl get hpa k8s-demo-app -n hpa-demo -o yaml > hpa-final-config.yaml
+
+# Clean up all resources
 kubectl delete -f k8s/hpa/step-06-cleanup.yaml
+
+# Verify namespace deletion
+kubectl get ns hpa-demo
 ```
 
 ## Optional Extensions

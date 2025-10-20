@@ -2,6 +2,7 @@ apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
   name: k8s-demo-app-vpa
+  namespace: vpa-demo
   labels:
     app: k8s-demo-app-vpa
   annotations:

@@ -2,6 +2,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: k8s-demo-app
+  namespace: hpa-demo
   labels:
     app: k8s-demo-app
   annotations:

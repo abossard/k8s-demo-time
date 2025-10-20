@@ -1,7 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vpa-demo
+  labels:
+    tutorial.k8s-demo/component: vpa
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: k8s-demo-app-vpa
+  namespace: vpa-demo
   labels:
     app: k8s-demo-app-vpa
 spec:
@@ -22,7 +30,7 @@ spec:
             - name: ASPNETCORE_URLS
               value: http://+:8080
             - name: HOLD_STARTUP_SECONDS
-              value: "30"
+              value: "5"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -111,6 +119,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: k8s-demo-app-vpa
+  namespace: vpa-demo
   labels:
     app: k8s-demo-app-vpa
 spec:
@@ -120,4 +129,20 @@ spec:
     - name: http
       port: 80
       targetPort: http
-  type: ClusterIP
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-demo-app-headless
+  namespace: vpa-demo
+  labels:
+    app: k8s-demo-app-vpa
+spec:
+  clusterIP: None
+  selector:
+    app: k8s-demo-app-vpa
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

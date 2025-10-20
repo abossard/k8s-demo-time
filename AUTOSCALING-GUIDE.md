@@ -68,13 +68,13 @@ kubectl apply -f k8s/hpa/step-01-base-workload.yaml
 kubectl apply -f k8s/hpa/step-02-hpa-cpu.yaml
 
 # Generate load and watch scaling
-kubectl port-forward svc/k8s-demo-app 8080:80
+kubectl port-forward svc/k8s-demo-app 8080:80 -n hpa-demo
 curl -X POST http://localhost:8080/api/stress/cpu \
   -H "Content-Type: application/json" \
   -d '{"minutes": 5, "threads": 8}'
 
 # Watch HPA in action
-kubectl get hpa k8s-demo-app -w
+kubectl get hpa k8s-demo-app -w -n hpa-demo
 ```
 
 ### 2. VPA Demonstrations (Request optimization)
@@ -87,7 +87,7 @@ kubectl apply -f k8s/vpa/step-01-base-workload.yaml
 kubectl apply -f k8s/vpa/step-02-vpa-off-mode.yaml
 
 # Check recommendations
-kubectl describe vpa k8s-demo-app-vpa
+kubectl describe vpa k8s-demo-app-vpa -n vpa-demo
 
 # Enable auto mode for live updates
 kubectl apply -f k8s/vpa/step-04-vpa-auto-mode.yaml
@@ -237,7 +237,7 @@ curl http://localhost:8080/api/status
 
 1. Check metrics server: `kubectl get pods -n kube-system -l k8s-app=metrics-server`
 2. Verify resource requests are set
-3. Check current metrics: `kubectl describe hpa <name>`
+3. Check current metrics: `kubectl describe hpa k8s-demo-app -n hpa-demo`
 
 ### VPA Not Updating
 
@@ -248,8 +248,8 @@ curl http://localhost:8080/api/status
 ### Unexpected Evictions
 
 1. Check node conditions: `kubectl describe nodes | grep Pressure`
-2. View eviction events: `kubectl get events --field-selector reason=Evicted`
-3. Review resource usage: `kubectl top nodes` and `kubectl top pods`
+2. View eviction events: `kubectl get events --field-selector reason=Evicted -n qos-demo`
+3. Review resource usage: `kubectl top nodes` and `kubectl top pods -n qos-demo`
 
 ## Monitoring
 
@@ -257,18 +257,23 @@ Key metrics to track:
 
 ```bash
 # Autoscaler status
-kubectl get hpa,vpa --all-namespaces
+kubectl get hpa -n hpa-demo
+kubectl get vpa -n vpa-demo
+kubectl get hpa,vpa -n autoscaling-demo  # for combined demos
 
 # Resource usage
 kubectl top nodes
-kubectl top pods --all-namespaces
+kubectl top pods -n hpa-demo
+kubectl top pods -n qos-demo
+kubectl top pods -n vpa-demo
 
 # Events
-kubectl get events --all-namespaces --sort-by='.lastTimestamp'
+kubectl get events -n hpa-demo --sort-by='.lastTimestamp'
+kubectl get events -n qos-demo --sort-by='.lastTimestamp'
+kubectl get events -n vpa-demo --sort-by='.lastTimestamp'
 
 # QoS distribution
-kubectl get pods --all-namespaces -o custom-columns=\
-NAMESPACE:.metadata.namespace,\
+kubectl get pods -n qos-demo -o custom-columns=\
 NAME:.metadata.name,\
 QOS:.status.qosClass
 ```

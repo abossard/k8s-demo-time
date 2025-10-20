@@ -39,7 +39,7 @@ Deploy the demo app with intentionally low resource requests to see VPA recommen
 
 ```bash
 kubectl apply -f k8s/vpa/step-01-base-workload.yaml
-kubectl get pods -n default -l app=k8s-demo-app-vpa -w
+kubectl get pods -n vpa-demo -l app=k8s-demo-app-vpa -w
 ```
 
 **Expected State:**
@@ -58,7 +58,7 @@ kubectl apply -f k8s/vpa/step-02-vpa-off-mode.yaml
 Wait a few minutes for VPA to collect metrics, then check recommendations:
 
 ```bash
-kubectl describe vpa k8s-demo-app-vpa
+kubectl describe vpa k8s-demo-app-vpa -n vpa-demo
 ```
 
 **Key Observations:**
@@ -70,7 +70,7 @@ Generate some load to see updated recommendations:
 
 ```bash
 # Port-forward to the service
-kubectl port-forward svc/k8s-demo-app-vpa 8080:80
+kubectl port-forward svc/k8s-demo-app-vpa 8080:80 -n vpa-demo
 
 # In another terminal, trigger CPU load
 curl -X POST http://localhost:8080/api/stress/cpu -H "Content-Type: application/json" -d '{"minutes": 5, "threads": 4}'
@@ -89,9 +89,9 @@ kubectl apply -f k8s/vpa/step-03-vpa-initial-mode.yaml
 - Delete a pod to see VPA set resources on the new replica:
 
 ```bash
-kubectl get pods -n default -l app=k8s-demo-app-vpa
-kubectl delete pod <pod-name>
-kubectl describe pod <new-pod-name> | grep -A 5 "Requests:"
+kubectl get pods -n vpa-demo -l app=k8s-demo-app-vpa
+kubectl delete pod <pod-name> -n vpa-demo
+kubectl describe pod <new-pod-name> -n vpa-demo | grep -A 5 "Requests:"
 ```
 
 ### 4. VPA in "Auto" Mode (20 min)
@@ -108,14 +108,14 @@ kubectl apply -f k8s/vpa/step-04-vpa-auto-mode.yaml
 - Check events to see VPA actions:
 
 ```bash
-kubectl get events --sort-by='.lastTimestamp' | grep -i vpa
-kubectl describe vpa k8s-demo-app-vpa
+kubectl get events -n vpa-demo --sort-by='.lastTimestamp' | grep -i vpa
+kubectl describe vpa k8s-demo-app-vpa -n vpa-demo
 ```
 
 Monitor pod restarts:
 
 ```bash
-kubectl get pods -n default -l app=k8s-demo-app-vpa -w
+kubectl get pods -n vpa-demo -l app=k8s-demo-app-vpa -w
 ```
 
 ### 5. VPA in "Recreate" Mode (10 min)
@@ -124,7 +124,7 @@ kubectl get pods -n default -l app=k8s-demo-app-vpa -w
 
 ```bash
 kubectl apply -f k8s/vpa/step-05-vpa-recreate-mode.yaml
-kubectl describe vpa k8s-demo-app-vpa
+kubectl describe vpa k8s-demo-app-vpa -n vpa-demo
 ```
 
 ### 6. VPA with Tight Bounds (20 min)
@@ -152,9 +152,7 @@ kubectl describe pod -n vpa-demo | grep -A 5 "Requests:"
 Remove all VPA demo resources:
 
 ```bash
-kubectl delete -f k8s/vpa/step-06-vpa-tight-bounds.yaml
-kubectl delete -f k8s/vpa/step-01-base-workload.yaml
-kubectl delete vpa k8s-demo-app-vpa --ignore-not-found=true
+kubectl delete -f k8s/vpa/step-07-cleanup.yaml
 ```
 
 ## Key Concepts
@@ -196,8 +194,8 @@ VPA recreates pods when:
 
 ```bash
 # Check VPA status
-kubectl get vpa
-kubectl describe vpa k8s-demo-app-vpa
+kubectl get vpa -n vpa-demo
+kubectl describe vpa k8s-demo-app-vpa -n vpa-demo
 
 # Check metrics server
 kubectl get pods -n kube-system -l k8s-app=metrics-server
