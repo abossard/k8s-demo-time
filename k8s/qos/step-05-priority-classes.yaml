@@ -67,6 +67,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "critical-app-headless"
           ports:
             - name: http
               containerPort: 8080
@@ -126,6 +132,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "background-job-headless"
           ports:
             - name: http
               containerPort: 8080
@@ -146,3 +158,65 @@ spec:
               path: /health/liveness
               port: http
             periodSeconds: 10
+---
+# Services
+apiVersion: v1
+kind: Service
+metadata:
+  name: critical-app
+  namespace: qos-demo
+  labels:
+    app: critical-app
+spec:
+  selector:
+    app: critical-app
+  ports:
+    - port: 80
+      targetPort: http
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: background-job
+  namespace: qos-demo
+  labels:
+    app: background-job
+spec:
+  selector:
+    app: background-job
+  ports:
+    - port: 80
+      targetPort: http
+  type: LoadBalancer
+---
+# Headless services for pod-to-pod coordination
+apiVersion: v1
+kind: Service
+metadata:
+  name: critical-app-headless
+  namespace: qos-demo
+  labels:
+    app: critical-app
+spec:
+  clusterIP: None
+  selector:
+    app: critical-app
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: background-job-headless
+  namespace: qos-demo
+  labels:
+    app: background-job
+spec:
+  clusterIP: None
+  selector:
+    app: background-job
+  ports:
+    - port: 80
+      targetPort: 8080

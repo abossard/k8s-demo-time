@@ -36,6 +36,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "backend-burstable-headless"
             - name: RESOURCE_REQUEST_CPU
               valueFrom:
                 resourceFieldRef:
@@ -126,4 +132,22 @@ spec:
   ports:
     - port: 80
       targetPort: http
-  type: ClusterIP
+  type: LoadBalancer
+---
+# Headless service for pod-to-pod coordination
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-burstable-headless
+  namespace: autoscaling-demo
+  labels:
+    app: backend
+    tier: burstable
+spec:
+  clusterIP: None
+  selector:
+    app: backend
+    tier: burstable
+  ports:
+    - port: 80
+      targetPort: 8080

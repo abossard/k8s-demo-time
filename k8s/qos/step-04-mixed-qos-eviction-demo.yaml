@@ -39,6 +39,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "besteffort-qos-headless"
           ports:
             - name: http
               containerPort: 8080
@@ -93,6 +99,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "burstable-qos-headless"
             - name: RESOURCE_REQUEST_CPU
               valueFrom:
                 resourceFieldRef:
@@ -163,6 +175,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "guaranteed-qos-headless"
             - name: RESOURCE_REQUEST_CPU
               valueFrom:
                 resourceFieldRef:
@@ -239,3 +257,49 @@ spec:
     - port: 80
       targetPort: http
   type: LoadBalancer
+---
+# Headless services for pod-to-pod coordination
+apiVersion: v1
+kind: Service
+metadata:
+  name: besteffort-qos-headless
+  namespace: qos-demo
+  labels:
+    app: besteffort-qos
+spec:
+  clusterIP: None
+  selector:
+    app: besteffort-qos
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: burstable-qos-headless
+  namespace: qos-demo
+  labels:
+    app: burstable-qos
+spec:
+  clusterIP: None
+  selector:
+    app: burstable-qos
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guaranteed-qos-headless
+  namespace: qos-demo
+  labels:
+    app: guaranteed-qos
+spec:
+  clusterIP: None
+  selector:
+    app: guaranteed-qos
+  ports:
+    - port: 80
+      targetPort: 8080

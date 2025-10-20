@@ -39,6 +39,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "critical-frontend-headless"
           ports:
             - name: http
               containerPort: 8080
@@ -100,6 +106,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "standard-backend-headless"
           ports:
             - name: http
               containerPort: 8080
@@ -161,6 +173,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "batch-worker-headless"
           ports:
             - name: http
               containerPort: 8080
@@ -282,7 +300,7 @@ spec:
   ports:
     - port: 80
       targetPort: http
-  type: ClusterIP
+  type: LoadBalancer
 ---
 apiVersion: v1
 kind: Service
@@ -295,7 +313,7 @@ spec:
   ports:
     - port: 80
       targetPort: http
-  type: ClusterIP
+  type: LoadBalancer
 ---
 apiVersion: v1
 kind: Service
@@ -308,4 +326,50 @@ spec:
   ports:
     - port: 80
       targetPort: http
-  type: ClusterIP
+  type: LoadBalancer
+---
+# Headless services for pod-to-pod coordination
+apiVersion: v1
+kind: Service
+metadata:
+  name: critical-frontend-headless
+  namespace: autoscaling-demo
+  labels:
+    app: critical-frontend
+spec:
+  clusterIP: None
+  selector:
+    app: critical-frontend
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: standard-backend-headless
+  namespace: autoscaling-demo
+  labels:
+    app: standard-backend
+spec:
+  clusterIP: None
+  selector:
+    app: standard-backend
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: batch-worker-headless
+  namespace: autoscaling-demo
+  labels:
+    app: batch-worker
+spec:
+  clusterIP: None
+  selector:
+    app: batch-worker
+  ports:
+    - port: 80
+      targetPort: 8080

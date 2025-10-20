@@ -35,6 +35,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "burstable-qos-headless"
             - name: RESOURCE_REQUEST_CPU
               valueFrom:
                 resourceFieldRef:
@@ -102,3 +108,19 @@ spec:
       port: 80
       targetPort: http
   type: LoadBalancer
+---
+# Headless service for pod-to-pod coordination
+apiVersion: v1
+kind: Service
+metadata:
+  name: burstable-qos-headless
+  namespace: qos-demo
+  labels:
+    app: burstable-qos
+spec:
+  clusterIP: None
+  selector:
+    app: burstable-qos
+  ports:
+    - port: 80
+      targetPort: 8080

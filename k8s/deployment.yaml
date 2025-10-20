@@ -33,6 +33,8 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "k8s-demo-app-headless"
             - name: POD_UID
               valueFrom:
                 fieldRef:
