@@ -212,6 +212,7 @@ spec:
   ports:
     - port: 80
       targetPort: http
+  type: LoadBalancer
 ---
 apiVersion: v1
 kind: Service
@@ -224,6 +225,7 @@ spec:
   ports:
     - port: 80
       targetPort: http
+  type: LoadBalancer
 ---
 apiVersion: v1
 kind: Service
@@ -236,3 +238,4 @@ spec:
   ports:
     - port: 80
       targetPort: http
+  type: LoadBalancer

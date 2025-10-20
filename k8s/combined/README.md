@@ -32,9 +32,7 @@ kubectl apply -f k8s/combined/step-03-complete-demo.yaml
 
 # View all pods with their QoS classes
 kubectl get pods -n autoscaling-demo -o custom-columns=\
-NAME:.metadata.name,\
-QOS:.status.qosClass,\
-PRIORITY:.spec.priorityClassName
+'NAME:.metadata.name,QOS:.status.qosClass,PRIORITY:.spec.priorityClassName'
 
 # Check autoscaling resources
 kubectl get hpa,vpa -n autoscaling-demo
@@ -142,10 +140,7 @@ kubectl apply -f k8s/combined/step-03-complete-demo.yaml
 ```bash
 # List all deployments with QoS
 kubectl get deployments -n autoscaling-demo -o custom-columns=\
-NAME:.metadata.name,\
-REPLICAS:.spec.replicas,\
-QOS:.metadata.labels.qos,\
-TIER:.metadata.labels.tier
+'NAME:.metadata.name,REPLICAS:.spec.replicas,QOS:.metadata.labels.qos,TIER:.metadata.labels.tier'
 
 # View autoscaling configurations
 kubectl get hpa,vpa -n autoscaling-demo

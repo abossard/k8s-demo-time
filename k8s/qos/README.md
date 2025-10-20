@@ -140,12 +140,7 @@ List all pods with their QoS classes:
 
 ```bash
 kubectl get pods -n qos-demo -o custom-columns=\
-NAME:.metadata.name,\
-QOS:.status.qosClass,\
-CPU_REQ:.spec.containers[0].resources.requests.cpu,\
-MEM_REQ:.spec.containers[0].resources.requests.memory,\
-CPU_LIM:.spec.containers[0].resources.limits.cpu,\
-MEM_LIM:.spec.containers[0].resources.limits.memory
+'NAME:.metadata.name,QOS:.status.qosClass,CPU_REQ:.spec.containers[0].resources.requests.cpu,MEM_REQ:.spec.containers[0].resources.requests.memory,CPU_LIM:.spec.containers[0].resources.limits.cpu,MEM_LIM:.spec.containers[0].resources.limits.memory'
 ```
 
 **Expected Output:**
@@ -174,10 +169,7 @@ Check pod priorities:
 
 ```bash
 kubectl get pods -n qos-demo -o custom-columns=\
-NAME:.metadata.name,\
-PRIORITY:.spec.priorityClassName,\
-QOS:.status.qosClass,\
-VALUE:.spec.priority
+'NAME:.metadata.name,PRIORITY:.spec.priorityClassName,QOS:.status.qosClass,VALUE:.spec.priority'
 ```
 
 **Understanding Priority:**
@@ -244,8 +236,7 @@ kubectl describe nodes | grep -A 10 "Conditions:"
 
 # Check for MemoryPressure condition
 kubectl get nodes -o custom-columns=\
-NAME:.metadata.name,\
-MEMORY_PRESSURE:.status.conditions[?(@.type==\"MemoryPressure\")].status
+'NAME:.metadata.name,MEMORY_PRESSURE:.status.conditions[?(@.type=="MemoryPressure")].status'
 
 # View kubelet eviction thresholds
 kubectl get --raw "/api/v1/nodes/<node-name>/proxy/configz" | grep -i eviction
