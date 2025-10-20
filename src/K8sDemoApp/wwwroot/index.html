@@ -109,13 +109,19 @@
       font-size: 0.95rem;
     }
 
-    input {
+    input[type="number"], input[type="text"] {
       padding: 0.4rem 0.6rem;
       border-radius: 0.4rem;
       border: 1px solid rgba(148, 163, 184, 0.3);
       background: rgba(8, 15, 30, 0.65);
       color: inherit;
       width: 6rem;
+    }
+
+    input[type="checkbox"] {
+      width: auto;
+      height: 1rem;
+      cursor: pointer;
     }
 
     button {
@@ -396,6 +402,10 @@
             <label>Downtime minutes
               <input type="number" min="0.1" step="0.5" value="5" id="input-startup-minutes">
             </label>
+            <label>
+              <input type="checkbox" id="input-startup-broadcast">
+              All replicas
+            </label>
             <button data-action="down">Take Down</button>
             <button data-action="up" class="secondary">Restore</button>
             <button data-action="ping" class="ghost" type="button">Ping</button>
@@ -414,6 +424,10 @@
             <label>Downtime minutes
               <input type="number" min="0.1" step="0.5" value="5" id="input-readiness-minutes">
             </label>
+            <label>
+              <input type="checkbox" id="input-readiness-broadcast">
+              All replicas
+            </label>
             <button data-action="down">Take Down</button>
             <button data-action="up" class="secondary">Restore</button>
             <button data-action="ping" class="ghost" type="button">Ping</button>
@@ -431,6 +445,10 @@
           <div class="flex">
             <label>Downtime minutes
               <input type="number" min="0.1" step="0.5" value="5" id="input-liveness-minutes">
+            </label>
+            <label>
+              <input type="checkbox" id="input-liveness-broadcast">
+              All replicas
             </label>
             <button data-action="down">Take Down</button>
             <button data-action="up" class="secondary">Restore</button>
@@ -455,6 +473,10 @@
         <label>Threads
           <input type="number" min="1" step="1" value="4" id="cpu-threads-input">
         </label>
+        <label>
+          <input type="checkbox" id="cpu-broadcast">
+          All replicas
+        </label>
         <button id="cpu-start">Start CPU Stress</button>
         <button id="cpu-stop" class="secondary">Stop CPU Stress</button>
       </div>
@@ -475,6 +497,10 @@
         <label>Target (MB)
           <input type="number" min="64" step="64" value="1024" id="memory-target-input">
         </label>
+        <label>
+          <input type="checkbox" id="memory-broadcast">
+          All replicas
+        </label>
         <button id="memory-start">Start Memory Stress</button>
         <button id="memory-stop" class="secondary">Stop Memory Stress</button>
       </div>
@@ -488,6 +514,10 @@
           <button id="chaos-crash">Crash Pod</button>
           <label>Freeze minutes
             <input type="number" min="0.1" step="0.5" value="5" id="chaos-freeze-minutes">
+          </label>
+          <label>
+            <input type="checkbox" id="chaos-freeze-broadcast">
+            All replicas
           </label>
           <button id="chaos-freeze" class="secondary">Freeze Pod</button>
         </div>
@@ -930,6 +960,7 @@
       document.querySelectorAll('#probes .probe').forEach(container => {
         const probe = container.dataset.probe;
         const minutesInput = document.getElementById(`input-${probe}-minutes`);
+        const broadcastCheckbox = document.getElementById(`input-${probe}-broadcast`);
         const label = formatProbeLabel(probe);
 
         container.querySelectorAll('button').forEach(button => {
@@ -940,15 +971,18 @@
             }
 
             try {
+              const broadcastToAll = broadcastCheckbox.checked;
               if (button.dataset.action === 'down') {
                 const minutes = getMinutesInput(minutesInput.id);
-                await postJson(`/api/probes/${probe}/down`, { minutes });
-                setNotification(`${label} probe taken down for ${minutes} minute(s).`);
-                logEvent('warn', `${probe} probe scheduled down`, { minutes });
+                await postJson(`/api/probes/${probe}/down`, { minutes, broadcastToAll });
+                const target = broadcastToAll ? 'all replicas' : 'this pod';
+                setNotification(`${label} probe taken down on ${target} for ${minutes} minute(s).`);
+                logEvent('warn', `${probe} probe scheduled down`, { minutes, broadcastToAll });
               } else if (button.dataset.action === 'up') {
-                await postJson(`/api/probes/${probe}/up`, {});
-                setNotification(`${label} probe restored.`);
-                logEvent('success', `${probe} probe restored`);
+                await postJson(`/api/probes/${probe}/up`, { broadcastToAll });
+                const target = broadcastToAll ? 'all replicas' : 'this pod';
+                setNotification(`${label} probe restored on ${target}.`);
+                logEvent('success', `${probe} probe restored`, { broadcastToAll });
               }
             } catch (error) {
               setNotification(error.message, true);
@@ -966,9 +1000,11 @@
           if (!Number.isFinite(threads) || threads <= 0) {
             throw new Error('Threads must be a positive integer.');
           }
-          await postJson('/api/stress/cpu', { minutes, threads });
-          setNotification(`CPU stress scheduled for ${minutes} minute(s) with ${threads} thread(s).`);
-          logEvent('warn', 'CPU stress scheduled', { minutes, threads });
+          const broadcastToAll = document.getElementById('cpu-broadcast').checked;
+          await postJson('/api/stress/cpu', { minutes, threads, broadcastToAll });
+          const target = broadcastToAll ? 'all replicas' : 'this pod';
+          setNotification(`CPU stress scheduled on ${target} for ${minutes} minute(s) with ${threads} thread(s).`);
+          logEvent('warn', 'CPU stress scheduled', { minutes, threads, broadcastToAll });
         } catch (error) {
           setNotification(error.message, true);
         }
@@ -991,9 +1027,11 @@
           if (!Number.isFinite(target) || target <= 0) {
             throw new Error('Target megabytes must be greater than zero.');
           }
-          await postJson('/api/stress/memory', { minutes, targetMegabytes: target });
-          setNotification(`Memory stress scheduled for ${minutes} minute(s) at ${target} MB.`);
-          logEvent('warn', 'Memory stress scheduled', { minutes, targetMegabytes: target });
+          const broadcastToAll = document.getElementById('memory-broadcast').checked;
+          await postJson('/api/stress/memory', { minutes, targetMegabytes: target, broadcastToAll });
+          const targetPods = broadcastToAll ? 'all replicas' : 'this pod';
+          setNotification(`Memory stress scheduled on ${targetPods} for ${minutes} minute(s) at ${target} MB.`);
+          logEvent('warn', 'Memory stress scheduled', { minutes, targetMegabytes: target, broadcastToAll });
         } catch (error) {
           setNotification(error.message, true);
         }
@@ -1030,10 +1068,11 @@
         freezeButton.addEventListener('click', async () => {
           try {
             const minutes = getMinutesInput('chaos-freeze-minutes');
-            const response = await postJson('/api/chaos/freeze', { minutes });
+            const broadcastToAll = document.getElementById('chaos-freeze-broadcast').checked;
+            const response = await postJson('/api/chaos/freeze', { minutes, broadcastToAll });
             const message = response?.message || `Application frozen for ${minutes} minute(s).`;
             setNotification(message);
-            logEvent('warn', 'Freeze requested', { minutes });
+            logEvent('warn', 'Freeze requested', { minutes, broadcastToAll });
           } catch (error) {
             setNotification(error.message, true);
           }

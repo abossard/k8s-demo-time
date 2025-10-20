@@ -34,14 +34,16 @@ dotnet run --urls http://localhost:8080
 Navigate to <http://localhost:8080> to open the dashboard. Key API routes:
 
 - `GET /api/status` — snapshot of probe health, uptime, hostname, and current stress activity.
-- `POST /api/probes/{startup|readiness|liveness}/down` with `{ "minutes": 5 }` — fail the selected probe for N minutes.
-- `POST /api/probes/{startup|readiness|liveness}/up` — immediately restore the probe.
-- `POST /api/stress/cpu` with `{ "minutes": 2, "threads": 8 }` — run CPU-bound workers.
+- `POST /api/probes/{startup|readiness|liveness}/down` with `{ "minutes": 5, "broadcastToAll": true }` — fail the selected probe for N minutes (optionally on all replicas).
+- `POST /api/probes/{startup|readiness|liveness}/up` with `{ "broadcastToAll": true }` — immediately restore the probe (optionally on all replicas).
+- `POST /api/stress/cpu` with `{ "minutes": 2, "threads": 8, "broadcastToAll": true }` — run CPU-bound workers (optionally on all replicas).
 - `DELETE /api/stress/cpu` — cancel CPU pressure ahead of schedule.
-- `POST /api/stress/memory` with `{ "minutes": 1, "targetMegabytes": 1024 }` — allocate and hold memory.
+- `POST /api/stress/memory` with `{ "minutes": 1, "targetMegabytes": 1024, "broadcastToAll": true }` — allocate and hold memory (optionally on all replicas).
 - `DELETE /api/stress/memory` — release memory pressure early.
 - `POST /api/chaos/crash` — schedule an immediate process crash (container exit).
-- `POST /api/chaos/freeze` with `{ "minutes": 5 }` — block request handling for the selected duration.
+- `POST /api/chaos/freeze` with `{ "minutes": 5, "broadcastToAll": true }` — block request handling for the selected duration (optionally on all replicas).
+
+**New**: All stress, probe, and chaos endpoints support an optional `broadcastToAll` parameter. When set to `true`, the action is coordinated across all replicas using DNS-based service discovery. See [BROADCAST-COORDINATION.md](BROADCAST-COORDINATION.md) for details.
 
 ## Container Image
 
@@ -156,6 +158,7 @@ flowchart TD
         G[StatusStream]
         H[ProbeStateStore]
         I[StressCoordinator]
+        P[PodCoordinator]
         S[Static Files]
     end
 
@@ -169,6 +172,11 @@ flowchart TD
         M[Readiness Probe]
         N[Liveness Probe]
     end
+    
+    subgraph "Pod Discovery"
+        O[Headless Service DNS]
+        Q[Other Pod Replicas]
+    end
 
     A -->|GET static assets| S
     A -->|GET /api/status| D
@@ -179,7 +187,9 @@ flowchart TD
     D -->|pull snapshot| G
     G -->|push update| B
     E -->|toggle state| H
+    E -->|broadcast if requested| P
     F -->|spin workloads| I
+    F -->|broadcast if requested| P
     H -->|publish change| G
     I -->|publish change| G
 
@@ -189,6 +199,9 @@ flowchart TD
     H -->|report health| L
     H -->|report health| M
     H -->|report health| N
+    
+    P -->|discover pods| O
+    P -->|coordinate action| Q
 ```
 
 ## Next Steps

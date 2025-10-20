@@ -1,5 +1,6 @@
 using K8sDemoApp;
 using K8sDemoApp.Application.Common;
+using K8sDemoApp.Application.Coordination;
 using K8sDemoApp.Application.Status;
 using K8sDemoApp.Models;
 using Microsoft.AspNetCore.Builder;
@@ -29,7 +30,7 @@ internal static class StressModule
         return endpoints;
     }
 
-    private static IResult HandleCpuStart(StressCpuRequest request, IStressSupervisor stress, IStatusStream statusStream)
+    private static async Task<IResult> HandleCpuStart(StressCpuRequest request, IStressSupervisor stress, IStatusStream statusStream, IPodCoordinator coordinator, ILoggerFactory loggerFactory)
     {
         if (!RequestValidators.TryGetDurationInMinutes(request.Minutes, MaxStressMinutes, out var duration, out var error))
         {
@@ -41,6 +42,35 @@ internal static class StressModule
             return WriteError(error);
         }
 
+        // If broadcast is requested, coordinate with other pods
+        if (request.BroadcastToAll == true)
+        {
+            var logger = loggerFactory.CreateLogger("StressModule");
+            logger.LogInformation("Broadcasting CPU stress to all pods. Duration: {Duration}, Threads: {Threads}", duration, threads);
+            
+            // Create a non-broadcast version of the request to send to other pods
+            var localRequest = request with { BroadcastToAll = false };
+            var broadcastResult = await coordinator.BroadcastToAllPodsAsync("/api/stress/cpu", localRequest);
+            
+            logger.LogInformation("CPU stress broadcast complete. Success: {Success}/{Total}, Failed: {Failed}", 
+                broadcastResult.SuccessfulPods, broadcastResult.TotalPods, broadcastResult.FailedPods);
+            
+            if (broadcastResult.SuccessfulPods > 0)
+            {
+                var response = new BroadcastResponse(
+                    $"CPU stress started on {broadcastResult.SuccessfulPods} of {broadcastResult.TotalPods} pods",
+                    broadcastResult.TotalPods,
+                    broadcastResult.SuccessfulPods,
+                    broadcastResult.FailedPods,
+                    broadcastResult.Errors
+                );
+                return Results.Json(response, AppJsonSerializerContext.Default.BroadcastResponse);
+            }
+            
+            return WriteError($"Failed to start CPU stress on any pods. Errors: {string.Join("; ", broadcastResult.Errors)}");
+        }
+
+        // Normal single-pod execution
         var result = stress.StartCpuStress(duration, threads);
         if (result.Success)
         {
@@ -58,7 +88,7 @@ internal static class StressModule
         return Results.Json(snapshot, AppJsonSerializerContext.Default.StressWorkloadStatus);
     }
 
-    private static IResult HandleMemoryStart(StressMemoryRequest request, IStressSupervisor stress, IStatusStream statusStream)
+    private static async Task<IResult> HandleMemoryStart(StressMemoryRequest request, IStressSupervisor stress, IStatusStream statusStream, IPodCoordinator coordinator, ILoggerFactory loggerFactory)
     {
         if (!RequestValidators.TryGetDurationInMinutes(request.Minutes, MaxStressMinutes, out var duration, out var error))
         {
@@ -70,6 +100,35 @@ internal static class StressModule
             return WriteError(error);
         }
 
+        // If broadcast is requested, coordinate with other pods
+        if (request.BroadcastToAll == true)
+        {
+            var logger = loggerFactory.CreateLogger("StressModule");
+            logger.LogInformation("Broadcasting memory stress to all pods. Duration: {Duration}, Target: {Target}MB", duration, target);
+            
+            // Create a non-broadcast version of the request to send to other pods
+            var localRequest = request with { BroadcastToAll = false };
+            var broadcastResult = await coordinator.BroadcastToAllPodsAsync("/api/stress/memory", localRequest);
+            
+            logger.LogInformation("Memory stress broadcast complete. Success: {Success}/{Total}, Failed: {Failed}", 
+                broadcastResult.SuccessfulPods, broadcastResult.TotalPods, broadcastResult.FailedPods);
+            
+            if (broadcastResult.SuccessfulPods > 0)
+            {
+                var response = new BroadcastResponse(
+                    $"Memory stress started on {broadcastResult.SuccessfulPods} of {broadcastResult.TotalPods} pods",
+                    broadcastResult.TotalPods,
+                    broadcastResult.SuccessfulPods,
+                    broadcastResult.FailedPods,
+                    broadcastResult.Errors
+                );
+                return Results.Json(response, AppJsonSerializerContext.Default.BroadcastResponse);
+            }
+            
+            return WriteError($"Failed to start memory stress on any pods. Errors: {string.Join("; ", broadcastResult.Errors)}");
+        }
+
+        // Normal single-pod execution
         var result = stress.StartMemoryStress(duration, target);
         if (result.Success)
         {

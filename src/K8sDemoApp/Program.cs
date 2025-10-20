@@ -1,5 +1,6 @@
 using K8sDemoApp;
 using K8sDemoApp.Application.Chaos;
+using K8sDemoApp.Application.Coordination;
 using K8sDemoApp.Application.Probes;
 using K8sDemoApp.Application.Status;
 using K8sDemoApp.Application.Stress;
@@ -12,6 +13,12 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHttpClient("PodCoordination")
+    .ConfigureHttpClient(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(10);
+    });
+builder.Services.AddSingleton<IPodCoordinator, PodCoordinator>();
 builder.Services.AddProbeModule();
 builder.Services.AddStressModule();
 builder.Services.AddStatusModule();
