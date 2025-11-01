@@ -876,24 +876,90 @@ kubectl logs oom-test-stress -n qos-demo --previous
 kubectl get pod oom-test-stress -n qos-demo -o jsonpath='{.status.containerStatuses[0].restartCount}'
 ```
 
-**Method 2: Using k8s-demo-app stress endpoint**
+**Method 2: Using k8s-demo-app (Recommended for Interactive Testing)**
+
+The k8s-demo-app has built-in memory stress endpoints that make it easy to simulate OOMKill scenarios.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oom-test-demoapp
+  namespace: qos-demo
+  labels:
+    app: oom-test-demoapp
+spec:
+  containers:
+  - name: demo-app
+    image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest  # Update with your registry
+    imagePullPolicy: Always
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    resources:
+      limits:
+        memory: "512Mi"  # App will be OOMKilled when exceeding this
+        cpu: "500m"
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+    env:
+    - name: ASPNETCORE_URLS
+      value: "http://+:8080"
+  restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oom-test-demoapp
+  namespace: qos-demo
+spec:
+  selector:
+    app: oom-test-demoapp
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: ClusterIP
+```
+
+Deploy and test:
 
 ```bash
-# Port-forward to the demo app
-kubectl port-forward -n qos-demo svc/burstable-qos 8082:80
+# Deploy the demo app pod (or use the manifest above)
+kubectl apply -f k8s/qos/oom-test-demoapp.yaml
 
-# Trigger memory stress exceeding the container limit
-# If limit is 1Gi, request 1200Mi
-curl -X POST http://localhost:8082/api/stress/memory \
+# Wait for pod to be ready
+kubectl wait --for=condition=ready pod/oom-test-demoapp -n qos-demo --timeout=60s
+
+# Port-forward to access the API
+kubectl port-forward -n qos-demo pod/oom-test-demoapp 8080:8080 &
+
+# Trigger memory stress exceeding the container limit (512Mi)
+# Request 600Mi to trigger OOMKill
+curl -X POST http://localhost:8080/api/stress/memory \
   -H "Content-Type: application/json" \
-  -d '{"minutes": 5, "targetMegabytes": 1200}'
+  -d '{"minutes": 5, "targetMegabytes": 600}'
 
-# Monitor the pod
+# Monitor the pod (will see OOMKilled and restarts)
 kubectl get pods -n qos-demo -w
 
 # Check for OOMKilled event
 kubectl get events -n qos-demo --sort-by='.lastTimestamp' | grep -i oom
+
+# Check restart count
+kubectl get pod oom-test-demoapp -n qos-demo -o jsonpath='{.status.containerStatuses[0].restartCount}'
+
+# View the demo app dashboard to see real-time memory usage
+# Open http://localhost:8080 in your browser before triggering stress
 ```
+
+**Advantages of using k8s-demo-app:**
+- Real-time dashboard showing memory usage and pod status
+- Can cancel stress test early via `DELETE /api/stress/memory`
+- Supports `broadcastToAll` parameter to trigger OOMKill across multiple replicas
+- Visual feedback of resource consumption before OOMKill
+- Built-in health probes to observe probe failures during stress
 
 **Method 3: Python memory leak simulation**
 
