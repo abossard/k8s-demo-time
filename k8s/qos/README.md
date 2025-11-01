@@ -384,8 +384,7 @@ flowchart TD
 
 ```bash
 # Find pods in CrashLoopBackOff
-kubectl get pods -A --field-selector status.phase=Running | \
-  grep -i crashloop
+kubectl get pods -A | grep -i crashloop
 
 # Check restart counts (high count indicates issues)
 kubectl get pods -A -o custom-columns=\
@@ -932,10 +931,10 @@ spec:
 
 ```bash
 # Run directly in a pod with low memory limits
-# This creates a string that grows by 10MB every iteration until OOMKilled
+# This creates a string that grows by 10MB every iteration with a small delay for predictability
 kubectl run oom-bomb --image=busybox --restart=Never \
   --limits='memory=64Mi' --requests='memory=32Mi' \
-  -- /bin/sh -c 'x=""; while true; do x="$x$(dd if=/dev/zero bs=1M count=10 2>/dev/null)"; done'
+  -- /bin/sh -c 'x=""; while true; do x="$x$(dd if=/dev/zero bs=1M count=10 2>/dev/null)"; sleep 0.1; done'
 
 # Watch it get OOMKilled (should happen within seconds)
 kubectl get pod oom-bomb -w
@@ -1068,9 +1067,8 @@ watch -n 1 'kubectl top pods -n oom-vs-eviction-demo'
 **Post-Test Analysis:**
 
 ```bash
-# Find all OOMKilled events
-kubectl get events -A --field-selector reason=OOMKilling -o json | \
-  jq '.items[] | {pod: .involvedObject.name, time: .lastTimestamp, message: .message}'
+# Find all OOMKilled events (note: some clusters may use 'OOMKilling' or 'OOMKilled')
+kubectl get events -A -o json | jq '.items[] | select(.reason == "OOMKilling" or .reason == "OOMKilled") | {pod: .involvedObject.name, time: .lastTimestamp, reason: .reason, message: .message}'
 
 # Find all eviction events
 kubectl get events -A --field-selector reason=Evicted -o json | \
