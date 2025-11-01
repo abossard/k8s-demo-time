@@ -2,12 +2,12 @@
 
 ## Project Overview
 
-K8s Demo Time is a .NET 9.0 native AOT Web API designed to showcase Kubernetes probe behavior, resource management, and autoscaling features. The application provides a hands-on demo environment for learning about HPA, VPA, probes, and resource pressure in Kubernetes clusters.
+K8s Demo Time is a .NET 9.0 Web API designed to showcase Kubernetes probe behavior, resource management, and autoscaling features. The application provides a hands-on demo environment for learning about HPA, VPA, probes, and resource pressure in Kubernetes clusters. The codebase is designed with AOT compatibility in mind (using source generators for JSON serialization), though native AOT publishing is currently disabled.
 
 ## Technology Stack
 
 - **Language**: .NET 9.0 (C#)
-- **Runtime**: Native AOT (Ahead-of-Time compilation)
+- **Runtime**: Standard .NET runtime (AOT disabled in current configuration, but designed for AOT compatibility)
 - **Web Framework**: ASP.NET Core Minimal APIs
 - **Infrastructure**: Azure Kubernetes Service (AKS), Azure Container Registry (ACR)
 - **IaC**: Bicep templates for Azure deployment
@@ -69,10 +69,11 @@ docker build --platform linux/amd64 -t k8s-demo-app:local .
 - **Minimal APIs**: Use ASP.NET Core minimal API patterns for endpoint definitions
 - **Immutability**: Prefer immutable records for data models
 - **Null Safety**: Leverage C# nullable reference types (`#nullable enable`)
-- **AOT Compatibility**: Ensure all code is compatible with native AOT compilation
+- **AOT Compatibility**: Code is designed to be AOT-compatible (though `PublishAot` is currently set to `false`)
   - Avoid dynamic code generation
   - Use source generators for JSON serialization (see `AppJsonSerializerContext.cs`)
-  - No reflection-based features
+  - Minimize reflection-based features
+  - Keep these practices even though AOT is not currently enabled
 - **Async/Await**: Use async patterns for I/O-bound operations
 - **Error Handling**: Return appropriate HTTP status codes and problem details
 
