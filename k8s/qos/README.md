@@ -780,6 +780,331 @@ kubectl describe pod <pod-name> -n qos-demo | grep -A 5 "Containers:"
 - Monitor: `kubectl top pods` and check CPU usage vs limits
 - BestEffort pods can use all available CPU (no limit)
 
+## Testing Guide: Simulating OOMKill and Eviction
+
+This section provides practical methods to simulate OOMKill and eviction scenarios for testing and learning.
+
+### How to Fake/Trigger OOMKill
+
+OOMKill occurs when a container exceeds its memory limit. Here are several methods to simulate this:
+
+```mermaid
+flowchart TD
+    subgraph "Method 1: Stress Tool"
+        A[Deploy Pod with Memory Limit] --> B[Use stress command]
+        B --> C[stress --vm 1<br/>--vm-bytes 512M<br/>--vm-hang 300]
+        C --> D[Container Consumes Memory]
+        D --> E{Memory > Limit?}
+        E -->|Yes| F[OOMKilled]
+    end
+    
+    subgraph "Method 2: Application Stress"
+        G[Use Demo App] --> H[POST /api/stress/memory]
+        H --> I[Set targetMegabytes<br/>> container limit]
+        I --> J[App Allocates Memory]
+        J --> K[Holds Memory for Duration]
+        K --> E
+    end
+    
+    subgraph "Method 3: Memory Leak Simulation"
+        L[Deploy Python Script] --> M[Continuously Append<br/>to Array]
+        M --> N[Memory Usage Grows]
+        N --> O[Eventually Hits Limit]
+        O --> E
+    end
+    
+    subgraph "Method 4: Shell Script"
+        P[Run in Container] --> Q[dd if=/dev/zero<br/>of=/dev/null<br/>| while :; do :; done &]
+        Q --> R[Fork Processes<br/>Consume Memory]
+        R --> E
+    end
+    
+    F --> S[Exit Code 137]
+    S --> T[Pod Restarts]
+    T --> U[Check Events:<br/>Reason: OOMKilled]
+```
+
+**Method 1: Using stress tool (Recommended)**
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oom-test-stress
+  namespace: qos-demo
+spec:
+  containers:
+  - name: stress
+    image: polinux/stress
+    command: ["stress"]
+    args:
+      - "--vm"
+      - "1"              # Number of memory workers
+      - "--vm-bytes"
+      - "256M"           # Amount to allocate (exceed limit)
+      - "--vm-hang"
+      - "300"            # Hold for 5 minutes
+    resources:
+      limits:
+        memory: "128Mi"  # Lower than --vm-bytes to trigger OOM
+      requests:
+        memory: "64Mi"
+  restartPolicy: Always
+```
+
+Deploy and observe:
+
+```bash
+# Deploy the stress pod
+kubectl apply -f oom-test-stress.yaml
+
+# Watch the pod (will see OOMKilled and restarts)
+kubectl get pods -n qos-demo -w
+
+# Check events
+kubectl describe pod oom-test-stress -n qos-demo | grep -A 10 "Events:"
+
+# View logs before OOM
+kubectl logs oom-test-stress -n qos-demo --previous
+
+# Check restart count
+kubectl get pod oom-test-stress -n qos-demo -o jsonpath='{.status.containerStatuses[0].restartCount}'
+```
+
+**Method 2: Using k8s-demo-app stress endpoint**
+
+```bash
+# Port-forward to the demo app
+kubectl port-forward -n qos-demo svc/burstable-qos 8082:80
+
+# Trigger memory stress exceeding the container limit
+# If limit is 1Gi, request 1200Mi
+curl -X POST http://localhost:8082/api/stress/memory \
+  -H "Content-Type: application/json" \
+  -d '{"minutes": 5, "targetMegabytes": 1200}'
+
+# Monitor the pod
+kubectl get pods -n qos-demo -w
+
+# Check for OOMKilled event
+kubectl get events -n qos-demo --sort-by='.lastTimestamp' | grep -i oom
+```
+
+**Method 3: Python memory leak simulation**
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oom-test-python
+  namespace: qos-demo
+spec:
+  containers:
+  - name: memory-leak
+    image: python:3.11-slim
+    command: ["python3", "-c"]
+    args:
+      - |
+        import time
+        data = []
+        while True:
+            # Append 10MB chunks every second
+            data.append(' ' * 10 * 1024 * 1024)
+            print(f'Allocated {len(data) * 10}MB')
+            time.sleep(1)
+    resources:
+      limits:
+        memory: "200Mi"
+      requests:
+        memory: "100Mi"
+  restartPolicy: Always
+```
+
+**Method 4: Shell-based memory bomb**
+
+```bash
+# Run directly in a pod with low memory limits
+kubectl run oom-bomb --image=busybox --restart=Never \
+  --limits='memory=64Mi' --requests='memory=32Mi' \
+  -- /bin/sh -c 'x=""; while true; do x="$x$(dd if=/dev/zero bs=1M count=10 2>/dev/null)"; done'
+
+# Watch it get OOMKilled
+kubectl get pod oom-bomb -w
+
+# Check the reason
+kubectl describe pod oom-bomb | grep -i oom
+```
+
+### Observing OOMKill vs Eviction
+
+To demonstrate the difference between OOMKill and eviction, run this scenario:
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oom-vs-eviction-demo
+---
+# Pod 1: Will be OOMKilled (exceeds limit)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: will-oom
+  namespace: oom-vs-eviction-demo
+  labels:
+    test: oomkill
+spec:
+  containers:
+  - name: app
+    image: polinux/stress
+    command: ["stress", "--vm", "1", "--vm-bytes", "256M", "--vm-hang", "600"]
+    resources:
+      limits:
+        memory: "128Mi"  # Will OOM when trying to allocate 256Mi
+      requests:
+        memory: "64Mi"
+  restartPolicy: Always
+---
+# Pod 2: BestEffort - will be evicted under node pressure
+apiVersion: v1
+kind: Pod
+metadata:
+  name: will-evict
+  namespace: oom-vs-eviction-demo
+  labels:
+    test: eviction
+spec:
+  containers:
+  - name: app
+    image: nginx:alpine
+  restartPolicy: Always
+---
+# Pod 3: Creates node memory pressure
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pressure-creator
+  namespace: oom-vs-eviction-demo
+spec:
+  containers:
+  - name: stress
+    image: polinux/stress
+    command: ["stress", "--vm", "4", "--vm-bytes", "2G", "--vm-hang", "600"]
+    resources:
+      limits:
+        memory: "8Gi"
+      requests:
+        memory: "4Gi"
+  restartPolicy: Never
+```
+
+**Testing Steps:**
+
+```bash
+# 1. Apply the test scenario
+kubectl apply -f oom-vs-eviction-test.yaml
+
+# 2. Monitor all pods
+kubectl get pods -n oom-vs-eviction-demo -w
+
+# 3. In another terminal, watch events
+kubectl get events -n oom-vs-eviction-demo --watch
+
+# 4. Check pod statuses and reasons
+kubectl get pods -n oom-vs-eviction-demo -o custom-columns=\
+'NAME:.metadata.name,STATUS:.status.phase,REASON:.status.reason,RESTARTS:.status.containerStatuses[0].restartCount'
+
+# 5. View detailed events
+kubectl describe pod will-oom -n oom-vs-eviction-demo | grep -i oom
+kubectl describe pod will-evict -n oom-vs-eviction-demo | grep -i evict
+
+# 6. Check node conditions
+kubectl describe nodes | grep -A 5 "Conditions:"
+
+# 7. Cleanup
+kubectl delete namespace oom-vs-eviction-demo
+```
+
+**Expected Results:**
+
+| Pod | Behavior | Reason | Restart Location | Status Message |
+|-----|----------|--------|------------------|----------------|
+| `will-oom` | OOMKilled | Exceeds memory limit | Same node | Exit Code 137, OOMKilled |
+| `will-evict` | Evicted | Node memory pressure | Different node | Failed, Reason: Evicted |
+| `pressure-creator` | Runs | Creates pressure | N/A | Running or Completed |
+
+### Monitoring and Verification
+
+**Real-time Monitoring Commands:**
+
+```bash
+# Terminal 1: Watch pods
+watch -n 1 'kubectl get pods -n oom-vs-eviction-demo -o custom-columns=\
+NAME:.metadata.name,STATUS:.status.phase,RESTARTS:.status.containerStatuses[0].restartCount,\
+NODE:.spec.nodeName,REASON:.status.reason'
+
+# Terminal 2: Watch events
+kubectl get events -n oom-vs-eviction-demo --watch --field-selector type=Warning
+
+# Terminal 3: Monitor node memory
+watch -n 1 'kubectl top nodes'
+
+# Terminal 4: Monitor pod memory
+watch -n 1 'kubectl top pods -n oom-vs-eviction-demo'
+```
+
+**Post-Test Analysis:**
+
+```bash
+# Find all OOMKilled events
+kubectl get events -A --field-selector reason=OOMKilling -o json | \
+  jq '.items[] | {pod: .involvedObject.name, time: .lastTimestamp, message: .message}'
+
+# Find all eviction events
+kubectl get events -A --field-selector reason=Evicted -o json | \
+  jq '.items[] | {pod: .involvedObject.name, time: .lastTimestamp, message: .message}'
+
+# Check container exit codes
+kubectl get pods -n oom-vs-eviction-demo -o json | \
+  jq '.items[] | {name: .metadata.name, 
+    exitCode: .status.containerStatuses[0].lastState.terminated.exitCode,
+    reason: .status.containerStatuses[0].lastState.terminated.reason}'
+
+# Compare OOMKilled vs Evicted
+kubectl get events -n oom-vs-eviction-demo --sort-by='.lastTimestamp' | \
+  grep -E "OOM|Evict" | \
+  awk '{print $1, $2, $5, $6, $7}'
+```
+
+### Key Differences to Observe
+
+```mermaid
+flowchart LR
+    subgraph "OOMKilled Pod"
+        A[Container Start] --> B[Memory Grows]
+        B --> C[Hits Limit]
+        C --> D[Kernel Kills Process]
+        D --> E[Exit Code 137]
+        E --> F[Restart on SAME Node]
+        F --> G[CrashLoopBackOff<br/>if Repeated]
+    end
+    
+    subgraph "Evicted Pod"
+        H[Pod Running] --> I[Node Low Memory]
+        I --> J[Kubelet Evaluates QoS]
+        J --> K[Pod Selected]
+        K --> L[Graceful Termination]
+        L --> M[Status: Evicted]
+        M --> N[Reschedule to<br/>DIFFERENT Node]
+        N --> O[Starts Fresh]
+    end
+    
+    subgraph "Detection"
+        P["OOMKilled:<br/>• reason: OOMKilled<br/>• exitCode: 137<br/>• restartCount increases<br/>• same nodeName"]
+        Q["Evicted:<br/>• reason: Evicted<br/>• status.reason: Evicted<br/>• different nodeName<br/>• pod recreated"]
+    end
+```
+
 ## Additional Resources
 
 - [Kubernetes QoS Classes](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/)
