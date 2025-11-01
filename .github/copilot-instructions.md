@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-K8s Demo Time is a .NET 9.0 Web API designed to showcase Kubernetes probe behavior, resource management, and autoscaling features. The application provides a hands-on demo environment for learning about HPA, VPA, probes, and resource pressure in Kubernetes clusters. The codebase is designed with AOT compatibility in mind (using source generators for JSON serialization), though native AOT publishing is currently disabled.
+K8s Demo Time is a .NET 9.0 Web API designed to showcase Kubernetes probe behaviour, resource management, and autoscaling features. The application provides a hands-on demo environment for learning about HPA, VPA, probes, and resource pressure in Kubernetes clusters. The codebase is designed with AOT compatibility in mind (using source generators for JSON serialization), though native AOT publishing is currently disabled.
 
 ## Technology Stack
 
