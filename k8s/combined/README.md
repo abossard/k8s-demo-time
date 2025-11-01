@@ -4,6 +4,219 @@
 
 This directory contains comprehensive demonstrations that combine VPA (Vertical Pod Autoscaler), HPA (Horizontal Pod Autoscaler), and QoS (Quality of Service) classes. These examples show how to use these features together to create resilient, efficient Kubernetes applications.
 
+## Theory: How Memory Pressure Triggers Cluster Autoscaler
+
+Understanding the relationship between memory pressure, eviction, and cluster scaling is crucial for designing resilient applications.
+
+```mermaid
+flowchart TD
+    subgraph "Initial State"
+        A[Cluster Running<br/>All Nodes Healthy]
+        A --> B[Pods Consuming Memory]
+    end
+    
+    subgraph "Memory Pressure Develops"
+        B --> C{Node Memory Usage<br/>> 90%?}
+        C -->|No| B
+        C -->|Yes| D[Node Memory Pressure]
+        D --> E[Kubelet Marks Node:<br/>MemoryPressure=True]
+    end
+    
+    subgraph "Eviction Process"
+        E --> F[Kubelet Starts<br/>Eviction Manager]
+        F --> G[Select Pods by QoS:<br/>BestEffort → Burstable → Guaranteed]
+        G --> H[Evict Lowest Priority Pods]
+        H --> I[Pod Status: Evicted]
+    end
+    
+    subgraph "Rescheduling Attempt"
+        I --> J[Deployment Controller<br/>Detects Pod Failure]
+        J --> K[Create Replacement Pod]
+        K --> L[Scheduler Attempts<br/>to Place Pod]
+        L --> M{Available Node<br/>with Memory?}
+    end
+    
+    subgraph "Cluster Autoscaler Triggered"
+        M -->|No Suitable Node| N[Pod Status: Pending<br/>Reason: Insufficient Memory]
+        N --> O[Cluster Autoscaler<br/>Monitors Pending Pods]
+        O --> P{Pod Unschedulable<br/>for > 30s?}
+        P -->|No| O
+        P -->|Yes| Q[Autoscaler Evaluates<br/>Node Group Capacity]
+        
+        Q --> R{Can Add Node<br/>Within Limits?}
+        R -->|No: Max Nodes Reached| S[Pod Remains Pending<br/>Alert Required]
+        R -->|Yes| T[Provision New Node<br/>via Cloud Provider]
+        
+        T --> U[New Node Joins Cluster]
+        U --> V[Node Reports Ready]
+        V --> W[Scheduler Places<br/>Pending Pods on New Node]
+        W --> X[Pods Start Successfully]
+    end
+    
+    subgraph "Successful Scheduling"
+        M -->|Yes: Node Found| Y[Pod Scheduled<br/>on Existing Node]
+        Y --> X
+    end
+    
+    subgraph "Preventing Future Pressure"
+        X --> Z{Monitor Memory Trends}
+        Z --> AA{Memory Usage<br/>Consistently High?}
+        AA -->|Yes| AB[Consider:<br/>- Increase requests with VPA<br/>- Scale out with HPA<br/>- Add more nodes]
+        AA -->|No| AC[System Stable]
+    end
+```
+
+**How Memory Pressure Leads to Scale-Out:**
+
+1. **High Memory Usage** → Pods consume most available memory on nodes
+2. **Memory Pressure** → Kubelet detects memory below threshold
+3. **Eviction** → Low-priority pods evicted to free memory
+4. **Rescheduling** → Evicted pods need new placement
+5. **No Capacity** → No existing node has sufficient memory
+6. **Pending Pods** → Pods stuck in Pending state
+7. **Autoscaler Triggers** → Cluster Autoscaler detects unschedulable pods
+8. **New Node Added** → Cloud provider provisions additional node
+9. **Pods Scheduled** → Pending pods placed on new node
+
+### Combining OOMKill, Eviction, and Autoscaling
+
+This diagram shows how these mechanisms work together in a complex scenario.
+
+```mermaid
+flowchart TD
+    subgraph "Scenario Start"
+        A[Production Workload<br/>Multiple Pods on Node]
+        A --> B[Memory Leak in Application]
+    end
+    
+    subgraph "Stage 1: OOMKill"
+        B --> C[Pod Memory Usage<br/>Approaches Limit]
+        C --> D{Memory Usage ><br/>Container Limit?}
+        D -->|Yes| E[Linux OOM Killer<br/>Kills Container Process]
+        E --> F[Container Status: OOMKilled<br/>Exit Code 137]
+        F --> G[Kubelet Restarts Container]
+        G --> H[Container Restarts on Same Node]
+        H --> I{Memory Leak<br/>Still Present?}
+        I -->|Yes| C
+        I -->|No| J[Pod Running Stable]
+    end
+    
+    subgraph "Stage 2: CrashLoopBackOff"
+        C --> K[Restart Count Increases<br/>1, 2, 3, 4, 5...]
+        K --> L[Pod Status:<br/>CrashLoopBackOff]
+        L --> M[Backoff Delay:<br/>10s → 20s → 40s → 80s → 160s → 300s]
+        M --> N{Node Has Enough<br/>Memory for Restart?}
+        N -->|Yes| O[Keep Attempting Restarts<br/>on Same Node]
+        O --> C
+    end
+    
+    subgraph "Stage 3: Node Memory Pressure"
+        N -->|No| P[Node Total Memory Usage<br/>> 90%]
+        P --> Q[Multiple Pods Consuming Memory]
+        Q --> R[Node Memory Available<br/>< 100Mi Threshold]
+        R --> S[Kubelet Detects<br/>MemoryPressure=True]
+    end
+    
+    subgraph "Stage 4: Eviction"
+        S --> T[Kubelet Eviction Manager<br/>Selects Victims]
+        T --> U{Evaluate Pods by QoS}
+        U -->|1st Priority| V[BestEffort Pods<br/>No resource requests]
+        U -->|2nd Priority| W[Burstable Pods<br/>Exceeding requests]
+        U -->|3rd Priority| X[Burstable Pods<br/>Within requests]
+        U -->|Last Resort| Y[Guaranteed Pods<br/>Requests == Limits]
+        
+        V --> Z[Evict BestEffort Pods]
+        W --> AA[Evict Burstable Pods]
+        X --> AA
+        Y --> AB[Evict Guaranteed Pods<br/>if Necessary]
+        
+        Z --> AC[Pods Evicted<br/>Status: Failed/Evicted]
+        AA --> AC
+        AB --> AC
+    end
+    
+    subgraph "Stage 5: Rescheduling"
+        AC --> AD[ReplicaSet/Deployment<br/>Controller Notices Missing Pod]
+        AD --> AE[Create New Pod Instance]
+        AE --> AF[Scheduler Evaluates Placement]
+        AF --> AG{Find Node with<br/>Available Memory?}
+    end
+    
+    subgraph "Stage 6: HPA Scales Out"
+        L --> AH[HPA Monitors Metrics]
+        AH --> AI{CPU/Memory Utilization<br/>> Target?}
+        AI -->|Yes| AJ[HPA Increases Replicas]
+        AJ --> AK[Deploy Additional Pods]
+        AK --> AL[More Pods = More Memory Demand]
+        AL --> P
+    end
+    
+    subgraph "Stage 7: Cluster Autoscaler"
+        AG -->|No Available Node| AM[Pods Status: Pending<br/>Insufficient Memory]
+        AM --> AN[Cluster Autoscaler<br/>Polls for Pending Pods]
+        AN --> AO{Pending > 30s?}
+        AO -->|Yes| AP[Calculate Required Capacity]
+        AP --> AQ{Within Node Group<br/>Max Limits?}
+        
+        AQ -->|No| AR[Alert: Cannot Scale<br/>Manual Intervention Needed]
+        AQ -->|Yes| AS[Request New Node<br/>from Cloud Provider]
+        
+        AS --> AT[Cloud Provider<br/>Provisions VM]
+        AT --> AU[New Node Boots<br/>Joins Cluster]
+        AU --> AV[Node Registers<br/>Status: Ready]
+        AV --> AW[Available Capacity<br/>Published]
+    end
+    
+    subgraph "Stage 8: Resolution"
+        AW --> AX[Scheduler Places<br/>Pending Pods]
+        AG -->|Yes: Found Node| AX
+        AX --> AY[Pods Start on<br/>Nodes with Memory]
+        AY --> AZ{Memory Leak<br/>Fixed?}
+        
+        AZ -->|No| BA[Cycle Continues<br/>More OOMKills]
+        AZ -->|Yes| BB[System Stabilizes]
+        
+        BB --> BC[VPA Recommendations<br/>Adjust Memory Requests]
+        BC --> BD[Right-sized Pods<br/>Reduced Pressure]
+        BD --> BE[Cluster Healthy]
+    end
+    
+    subgraph "Lessons Learned"
+        BF["Prevention Strategy:<br/>1. VPA to right-size memory<br/>2. HPA for horizontal scaling<br/>3. Guaranteed QoS for critical pods<br/>4. Memory limits to prevent runaway<br/>5. Cluster autoscaler for capacity<br/>6. Proper monitoring and alerts"]
+    end
+```
+
+**Key Takeaways:**
+
+1. **OOMKill** happens when containers exceed their memory limits
+2. **CrashLoopBackOff** occurs when containers repeatedly fail to start
+3. **Eviction** removes pods when nodes have memory pressure
+4. **HPA** can worsen pressure by adding more replicas
+5. **Cluster Autoscaler** adds nodes when pods can't be scheduled
+6. **VPA** helps prevent issues by right-sizing memory requests
+
+**Real-World Example:**
+
+```
+Timeline of events:
+00:00 - Application deployed with 256Mi memory limit
+00:15 - Memory leak causes gradual memory growth
+00:30 - Container hits 256Mi limit → OOMKilled
+00:31 - Kubelet restarts container on same node
+00:45 - Container OOMKilled again (leak still present)
+01:00 - Pod in CrashLoopBackOff (3 restarts)
+01:15 - Node memory usage reaches 92% (pressure threshold)
+01:16 - Kubelet evicts BestEffort pods to free memory
+01:17 - Evicted pods need rescheduling
+01:18 - No nodes have sufficient memory → Pods Pending
+01:20 - Cluster Autoscaler detects pending pods for 30s+
+01:25 - New node provisioned by cloud provider
+01:30 - Pods scheduled on new node
+01:35 - VPA recommends increasing memory to 512Mi
+01:40 - Deploy with VPA recommendations
+01:45 - System stable with appropriate resources
+```
+
 ## Key Concepts Integration
 
 ### 1. HPA + Guaranteed QoS

@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: oom-test-demoapp
+  namespace: qos-demo
+  labels:
+    app: oom-test-demoapp
+    test-type: oomkill-simulation
+spec:
+  containers:
+  - name: demo-app
+    image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+    imagePullPolicy: Always
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    resources:
+      limits:
+        memory: "512Mi"  # App will be OOMKilled when exceeding this limit
+        cpu: "500m"
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+    env:
+    - name: ASPNETCORE_URLS
+      value: "http://+:8080"
+    livenessProbe:
+      httpGet:
+        path: /health/liveness
+        port: 8080
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    readinessProbe:
+      httpGet:
+        path: /health/readiness
+        port: 8080
+      initialDelaySeconds: 5
+      periodSeconds: 5
+  restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oom-test-demoapp
+  namespace: qos-demo
+  labels:
+    app: oom-test-demoapp
+spec:
+  selector:
+    app: oom-test-demoapp
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+    name: http
+  type: ClusterIP
