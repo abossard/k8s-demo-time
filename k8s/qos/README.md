@@ -399,6 +399,12 @@ kubectl describe pod POD_NAME | grep -A 5 "Limits:"
 kubectl describe node NODE_NAME | grep -A 5 "Allocatable:"
 ```
 
+---
+
+## Practical Tutorial: Hands-On Lab
+
+Now that you understand the theory, let's apply it in practice with step-by-step labs.
+
 ## Lab Flow
 
 ```mermaid
@@ -922,17 +928,23 @@ spec:
 
 **Method 4: Shell-based memory bomb**
 
+> ⚠️ **WARNING:** This command creates an aggressive memory consumption loop that will quickly consume all available memory within the container. Use only in test environments with proper resource limits set. The pod will be OOMKilled when it hits the memory limit.
+
 ```bash
 # Run directly in a pod with low memory limits
+# This creates a string that grows by 10MB every iteration until OOMKilled
 kubectl run oom-bomb --image=busybox --restart=Never \
   --limits='memory=64Mi' --requests='memory=32Mi' \
   -- /bin/sh -c 'x=""; while true; do x="$x$(dd if=/dev/zero bs=1M count=10 2>/dev/null)"; done'
 
-# Watch it get OOMKilled
+# Watch it get OOMKilled (should happen within seconds)
 kubectl get pod oom-bomb -w
 
 # Check the reason
 kubectl describe pod oom-bomb | grep -i oom
+
+# Cleanup after testing
+kubectl delete pod oom-bomb
 ```
 
 ### Observing OOMKill vs Eviction
@@ -1066,9 +1078,7 @@ kubectl get events -A --field-selector reason=Evicted -o json | \
 
 # Check container exit codes
 kubectl get pods -n oom-vs-eviction-demo -o json | \
-  jq '.items[] | {name: .metadata.name, 
-    exitCode: .status.containerStatuses[0].lastState.terminated.exitCode,
-    reason: .status.containerStatuses[0].lastState.terminated.reason}'
+  jq '.items[] | {name: .metadata.name, exitCode: .status.containerStatuses[0].lastState.terminated.exitCode, reason: .status.containerStatuses[0].lastState.terminated.reason}'
 
 # Compare OOMKilled vs Evicted
 kubectl get events -n oom-vs-eviction-demo --sort-by='.lastTimestamp' | \
