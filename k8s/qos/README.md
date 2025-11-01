@@ -846,7 +846,7 @@ spec:
       - "--vm"
       - "1"              # Number of memory workers
       - "--vm-bytes"
-      - "256M"           # Amount to allocate (exceed limit)
+      - "256Mi"          # Amount to allocate (exceed limit)
       - "--vm-hang"
       - "300"            # Hold for 5 minutes
     resources:
@@ -931,7 +931,7 @@ spec:
 
 ```bash
 # Run directly in a pod with low memory limits
-# This creates a string that grows by 10MB every iteration with a small delay for predictability
+# Each iteration creates a 10MB string and concatenates it to the growing variable
 kubectl run oom-bomb --image=busybox --restart=Never \
   --limits='memory=64Mi' --requests='memory=32Mi' \
   -- /bin/sh -c 'x=""; while true; do x="$x$(dd if=/dev/zero bs=1M count=10 2>/dev/null)"; sleep 0.1; done'
