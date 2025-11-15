@@ -8,6 +8,8 @@ What we'll learn today:
 - VPA and how to configure it
   - Demo app that can be vertically scaled
 - Horizontal Pod Autoscaler (HPA) and how to configure it
+- Bin packing strategies and cost vs. stability trade-offs
+  - Progressive journey from static deployments to aggressive optimization
 - Cilium Network Policies and Network Observability with AKS
 
 ## Application Overview

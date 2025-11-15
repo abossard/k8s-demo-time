@@ -1,0 +1,261 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bin-packing-demo
+  labels:
+    tutorial.k8s-demo/component: bin-packing
+---
+# Step 2: QoS-Aware Deployment
+# Introduces different QoS classes based on criticality
+# Frontend: Guaranteed (critical user-facing)
+# Backend: Burstable (less critical, can tolerate some variance)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: bin-packing-demo
+  labels:
+    app: frontend
+    tier: frontend
+    tutorial-step: "02-qos-aware"
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        tier: frontend
+        qos-class: guaranteed
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "frontend-headless"
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.memory
+          ports:
+            - name: http
+              containerPort: 8080
+          # Guaranteed QoS: requests == limits
+          # Still generous but signals this is critical
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+# Backend: Burstable QoS (requests < limits)
+# Less critical, can be evicted before frontend under pressure
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: bin-packing-demo
+  labels:
+    app: backend
+    tier: backend
+    tutorial-step: "02-qos-aware"
+spec:
+  replicas: 4  # Can deploy more with Burstable
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        tier: backend
+        qos-class: burstable
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "backend-headless"
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.memory
+          ports:
+            - name: http
+              containerPort: 8080
+          # Burstable QoS: requests < limits
+          # Lower requests allow better bin packing
+          resources:
+            requests:
+              cpu: "500m"     # Lower request
+              memory: "512Mi"
+            limits:
+              cpu: "800m"     # Can burst higher
+              memory: "768Mi"
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+# Services (same as step 1)
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: bin-packing-demo
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-headless
+  namespace: bin-packing-demo
+  labels:
+    app: frontend
+spec:
+  clusterIP: None
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: bin-packing-demo
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-headless
+  namespace: bin-packing-demo
+  labels:
+    app: backend
+spec:
+  clusterIP: None
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
