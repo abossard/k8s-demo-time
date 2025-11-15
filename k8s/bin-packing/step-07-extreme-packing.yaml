@@ -5,18 +5,18 @@ metadata:
   labels:
     tutorial.k8s-demo/component: bin-packing
 ---
-# Step 7: EXTREME BIN PACKING - The Card House
-# WARNING: This is intentionally unstable to demonstrate failure modes
-# DO NOT USE IN PRODUCTION!
+# Step 7: EXTREME BIN PACKING - When Growth Evicts Others
+# This demonstrates aggressive bin packing where:
+# - Core services (frontend) remain stable with Guaranteed QoS
+# - Supporting services use minimal resources
+# - Many low-priority pods fill available space
+# - When core needs to scale, low-priority pods get evicted
+# - System remains functional but non-critical services suffer
 #
-# This configuration:
-# - Uses minimal resource requests
-# - Runs many BestEffort pods
-# - Has very aggressive HPA and VPA settings
-# - Prioritizes cost over stability
-# - Will fail catastrophically under load
+# This is a realistic "cost-optimized" scenario that works under normal load
+# but shows trade-offs when the system needs to grow.
 
-# Frontend - Still Guaranteed but with minimal resources
+# Frontend - Critical service with Guaranteed QoS (will remain stable)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,7 +28,7 @@ metadata:
     priority: critical
     tutorial-step: "07-extreme"
   annotations:
-    description: "EXTREME: Minimal Guaranteed QoS"
+    description: "Critical service - will stay up and scale, evicting others"
 spec:
   replicas: 2
   selector:
@@ -83,14 +83,14 @@ spec:
           ports:
             - name: http
               containerPort: 8080
-          # EXTREME: Minimal Guaranteed resources
+          # Guaranteed QoS but sized for actual baseline needs
           resources:
             requests:
-              cpu: "250m"      # Very low for Guaranteed
-              memory: "256Mi"
+              cpu: "300m"      # Enough for normal operation
+              memory: "384Mi"
             limits:
-              cpu: "250m"
-              memory: "256Mi"
+              cpu: "300m"
+              memory: "384Mi"
           startupProbe:
             httpGet:
               path: /health/startup
@@ -125,9 +125,9 @@ metadata:
     priority: normal
     tutorial-step: "07-extreme"
   annotations:
-    description: "EXTREME: Tiny requests, high limits"
+    description: "Supporting service - uses minimal resources but can burst"
 spec:
-  replicas: 4
+  replicas: 3  # Reduced from 4
   selector:
     matchLabels:
       app: backend
@@ -180,14 +180,14 @@ spec:
           ports:
             - name: http
               containerPort: 8080
-          # EXTREME: Minimal requests, limits way higher
+          # Burstable: Very low requests but reasonable limits
           resources:
             requests:
-              cpu: "50m"       # Dangerously low
-              memory: "128Mi"
+              cpu: "100m"      # Minimal baseline
+              memory: "192Mi"
             limits:
-              cpu: "2000m"     # 40x CPU request!
-              memory: "2Gi"    # 16x memory request!
+              cpu: "1000m"     # Can burst 10x
+              memory: "1Gi"    # Can burst ~5x
           startupProbe:
             httpGet:
               path: /health/startup
@@ -222,9 +222,9 @@ metadata:
     priority: low
     tutorial-step: "07-extreme"
   annotations:
-    description: "EXTREME: Many BestEffort pods"
+    description: "Low-priority batch jobs - will be evicted when core needs space"
 spec:
-  replicas: 8  # Many pods, no resources!
+  replicas: 6  # Reduced to be more realistic
   selector:
     matchLabels:
       app: worker
@@ -441,7 +441,7 @@ value: 100
 globalDefault: false
 description: "Low priority for batch and cache"
 ---
-# EXTREME VPA - Very tight bounds
+# VPA - Reasonable bounds for frontend
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
@@ -458,11 +458,11 @@ spec:
     containerPolicies:
       - containerName: k8s-demo-app
         minAllowed:
-          cpu: "100m"
-          memory: "128Mi"
+          cpu: "200m"
+          memory: "256Mi"
         maxAllowed:
-          cpu: "400m"      # Very tight maximum
-          memory: "384Mi"
+          cpu: "500m"      # Reasonable maximum
+          memory: "512Mi"
         controlledResources:
           - cpu
           - memory
@@ -483,16 +483,16 @@ spec:
     containerPolicies:
       - containerName: k8s-demo-app
         minAllowed:
-          cpu: "25m"       # Extremely low
-          memory: "64Mi"
+          cpu: "50m"
+          memory: "128Mi"
         maxAllowed:
-          cpu: "200m"      # Not much headroom
-          memory: "256Mi"
+          cpu: "300m"
+          memory: "384Mi"
         controlledResources:
           - cpu
           - memory
 ---
-# EXTREME HPA - Very aggressive
+# HPA - Aggressive but functional settings
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -504,29 +504,29 @@ spec:
     kind: Deployment
     name: frontend
   minReplicas: 2
-  maxReplicas: 15  # High max
+  maxReplicas: 8  # Reasonable max
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 85  # Very high threshold
+          averageUtilization: 70  # Aggressive but safe
     - type: Resource
       resource:
         name: memory
         target:
           type: Utilization
-          averageUtilization: 90  # Dangerously high
+          averageUtilization: 75
   behavior:
     scaleUp:
-      stabilizationWindowSeconds: 15  # Scale up very fast
+      stabilizationWindowSeconds: 30  # Quick scale up
       policies:
         - type: Percent
-          value: 200  # Triple capacity
-          periodSeconds: 15
+          value: 100  # Double capacity
+          periodSeconds: 30
     scaleDown:
-      stabilizationWindowSeconds: 60  # Scale down fast too
+      stabilizationWindowSeconds: 120  # Slower scale down
       policies:
         - type: Percent
           value: 50
@@ -543,29 +543,29 @@ spec:
     kind: Deployment
     name: backend
   minReplicas: 2
-  maxReplicas: 20
+  maxReplicas: 10  # Reasonable max
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 90  # Extreme
+          averageUtilization: 75  # Aggressive but functional
     - type: Resource
       resource:
         name: memory
         target:
           type: Utilization
-          averageUtilization: 95  # Will cause OOMs
+          averageUtilization: 80
   behavior:
     scaleUp:
-      stabilizationWindowSeconds: 10
+      stabilizationWindowSeconds: 30
       policies:
         - type: Percent
-          value: 300
-          periodSeconds: 15
+          value: 100
+          periodSeconds: 30
     scaleDown:
-      stabilizationWindowSeconds: 30
+      stabilizationWindowSeconds: 120
       policies:
         - type: Pods
           value: 3

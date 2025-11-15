@@ -270,76 +270,305 @@ kubectl get pods -n bin-packing-demo --field-selector status.phase=Failed
 
 ---
 
-### Step 7: Extreme Bin Packing - The Card House (60 min)
+### Step 7: Extreme Bin Packing - When Growth Evicts Others (60 min)
 
-**Concept:** Push bin packing to the extreme to see when and how systems fail.
+**Concept:** Demonstrate aggressive bin packing where the system works normally but when core services need to scale, low-priority pods get evicted. This is a realistic cost-optimized scenario showing that "the core still works, but growth kicks others out."
 
 **Changes from Step 6:**
-- Minimal resource requests
-- Aggressive HPA settings
-- Very tight VPA bounds
-- Mixed QoS with many BestEffort pods
-- Simulates "cost optimization at all costs"
+- Core services (frontend) remain stable with Guaranteed QoS
+- Supporting services (backend) use minimal requests but can burst
+- Many low-priority BestEffort pods (workers, cache, analytics) fill available space
+- Aggressive HPA settings for frontend to trigger scaling
+- When frontend scales under load, low-priority pods are evicted to make room
 
 ```bash
 kubectl apply -f k8s/bin-packing/step-07-extreme-packing.yaml
 ```
 
-**The Demonstration - Watch It Collapse:**
+---
 
+## 🎤 PRESENTER GUIDE: Step 7 Demonstration
+
+This section provides detailed click-by-click instructions for presenting this tutorial.
+
+### Setup Phase (5 minutes)
+
+**1. Deploy the extreme configuration:**
 ```bash
-# Check initial state (should be packed tight)
-kubectl get nodes -o custom-columns=NAME:.metadata.name,CPU_ALLOC:.status.allocatable.cpu,MEM_ALLOC:.status.allocatable.memory
+kubectl apply -f k8s/bin-packing/step-07-extreme-packing.yaml
+```
+**What to say:** "We're deploying an aggressive bin-packing configuration. The frontend is Guaranteed QoS and will stay up, backend is Burstable with minimal requests, and we have many BestEffort pods filling all available space."
+
+**2. Wait for all pods to be ready:**
+```bash
+watch kubectl get pods -n bin-packing-demo
+```
+**What to look for:** All pods should reach Running state within 1-2 minutes. Count the pods - you should see:
+- 2 frontend pods (Guaranteed)
+- 3 backend pods (Burstable)
+- 6 worker pods (BestEffort)
+- 5 cache pods (BestEffort)
+- 4 analytics pods (BestEffort)
+**Total: ~20 pods**
+
+Press `Ctrl+C` when all are Running.
+
+**3. Check QoS classes:**
+```bash
+kubectl get pods -n bin-packing-demo -o custom-columns=\
+NAME:.metadata.name,\
+QOS:.status.qosClass,\
+PRIORITY:.spec.priorityClassName
+```
+**What to say:** "Notice the QoS classes - frontend is Guaranteed (highest priority), backend is Burstable (medium), and workers/cache/analytics are BestEffort (lowest priority, will be evicted first)."
+
+**What to look for:**
+- Frontend pods: `Guaranteed` / `high-priority`
+- Backend pods: `Burstable` / `normal-priority`
+- Worker/cache/analytics: `BestEffort` / `low-priority`
+
+**4. Check initial node utilization:**
+```bash
 kubectl top nodes
+```
+**What to say:** "Look at the node utilization - we're already running at 60-75% capacity with all these pods packed in."
 
-# Trigger multi-pod stress
+**What to look for:** CPU and memory usage should be moderate (60-75%)
+
+**5. Check pod distribution:**
+```bash
+kubectl get pods -n bin-packing-demo -o wide | awk '{print $7}' | sort | uniq -c
+```
+**What to say:** "Pods are distributed across nodes. The BestEffort pods take up space but don't reserve resources, allowing dense packing."
+
+---
+
+### Demonstration Phase (20 minutes)
+
+**6. Open the dashboard in terminal 1:**
+```bash
 kubectl port-forward svc/frontend -n bin-packing-demo 8080:80
+```
+**What to say:** "Let me forward the frontend service so we can trigger load on it."
 
-# In another terminal: Stress CPU on all replicas
+Then open browser to: `http://localhost:8080`
+
+**What to show:** The k8s-demo-app dashboard showing:
+- Current resource usage
+- Pod information
+- Stress test controls
+
+**7. In terminal 2, watch pods:**
+```bash
+watch -n 2 'kubectl get pods -n bin-packing-demo -o wide | grep -E "NAME|frontend|worker|cache|analytics" | head -15'
+```
+**What to say:** "I'm going to watch the pods in real-time to see what happens when we apply load."
+
+**8. In terminal 3, watch HPA:**
+```bash
+watch -n 2 'kubectl get hpa -n bin-packing-demo'
+```
+**What to say:** "And here we can see the HPA metrics and current replica counts."
+
+**9. In terminal 4, watch events (crucial!):**
+```bash
+kubectl get events -n bin-packing-demo --sort-by='.lastTimestamp' -w
+```
+**What to say:** "This terminal will show us eviction events as they happen."
+
+**10. Trigger CPU load on frontend (via browser or curl):**
+
+**Option A - Browser (recommended for presentation):**
+- Click "Stress Test" section in the dashboard
+- Set "Duration (minutes)" to: `5`
+- Set "CPU Threads" to: `4`
+- Check "Broadcast to all pods"
+- Click "Start CPU Stress"
+
+**Option B - Command line:**
+```bash
 curl -X POST http://localhost:8080/api/stress/cpu \
   -H "Content-Type: application/json" \
-  -d '{"minutes": 10, "threads": 16, "broadcastToAll": true}'
-
-# Wait 2 minutes, then add memory stress
-curl -X POST http://localhost:8080/api/stress/memory \
-  -H "Content-Type: application/json" \
-  -d '{"minutes": 10, "targetMegabytes": 3072, "broadcastToAll": true}'
-
-# Watch the cascade of failures
-kubectl get events -n bin-packing-demo --sort-by='.lastTimestamp' -w
-kubectl get pods -n bin-packing-demo -w
-kubectl top nodes -w
+  -d '{"minutes": 5, "threads": 4, "broadcastToAll": true}'
 ```
 
-**What to Observe (The Collapse):**
+**What to say:** "I'm starting CPU stress on all frontend pods. This will drive up CPU utilization and trigger the HPA to scale out."
 
-1. **Initial Response** (0-2 min):
-   - HPA tries to scale out
-   - Node CPU/memory pressure builds
-   - Some pods start throttling
+---
 
-2. **First Wave** (2-4 min):
-   - BestEffort pods start getting evicted
-   - Burstable pods exceeding requests get OOMKilled
-   - HPA can't schedule new pods (no node capacity)
+### Observation Phase (15 minutes)
 
-3. **Cascade Effect** (4-8 min):
-   - Node memory pressure triggers more evictions
-   - Pod restarts fail due to lack of resources
-   - Guaranteed pods might even get affected
-   - CrashLoopBackOff for some pods
+**11. Watch HPA trigger (30-60 seconds after load starts):**
+**What to look for in terminal 3:**
+```
+NAME           REFERENCE           TARGETS         MINPODS   MAXPODS   REPLICAS
+frontend-hpa   Deployment/frontend  85%/70%        2         8         2
+```
+**What to say:** "Notice the CPU target is now above threshold (85% vs 70% target). The HPA will scale up."
 
-4. **System Instability** (8+ min):
-   - Scheduler can't place pods
-   - Thrashing (constant evict/restart cycles)
-   - Service degradation or outage
-   - The "card house" has collapsed
+**12. Watch HPA scale decision (~1 minute):**
+**What to look for in terminal 3:**
+```
+frontend-hpa   Deployment/frontend  88%/70%        2         8         4
+```
+**What to say:** "The HPA has decided to scale from 2 to 4 replicas to handle the load."
+
+**13. Watch for evictions in terminal 4:**
+**What to look for in events terminal:**
+```
+2m ago   Normal    Evicted   Pod   Evicting pod due to node memory pressure
+2m ago   Normal    Killing   Pod   Stopping container k8s-demo-app
+```
+**What to say:** "HERE IT IS! The scheduler needs space for new frontend pods. BestEffort pods are being evicted to make room. This is expected - the low-priority workers are being kicked out so the critical frontend can scale."
+
+**14. Check which pods were evicted in terminal 2:**
+**What to look for:**
+- Some worker/cache/analytics pods show `Evicted` or `Pending` status
+- Frontend pods show `Running` with new pods being created
+- Backend pods should remain stable
+
+**What to say:** "See how the frontend scaled successfully to handle load, but several worker and cache pods were evicted. The CORE SERVICE WORKS and scaled, but it kicked out the less important batch jobs."
+
+**15. Check node utilization:**
+```bash
+kubectl top nodes
+```
+**What to say:** "Node utilization is now higher (75-85%) because frontend pods are using their allocated resources, and low-priority pods were evicted."
+
+**16. View evicted pods:**
+```bash
+kubectl get pods -n bin-packing-demo --field-selector=status.phase=Failed
+```
+**What to say:** "These are the pods that were evicted. Notice they're all BestEffort (worker, cache, analytics) - never the critical frontend."
+
+**17. Check frontend service is still working:**
+```bash
+curl http://localhost:8080/api/status
+```
+**What to say:** "The frontend is still responding perfectly. From a user perspective, the service works great. But behind the scenes, we sacrificed batch jobs to make room."
+
+---
+
+### Analysis Phase (10 minutes)
+
+**18. Show pod distribution after scaling:**
+```bash
+kubectl get pods -n bin-packing-demo -o custom-columns=\
+NAME:.metadata.name,\
+STATUS:.status.phase,\
+QOS:.status.qosClass,\
+NODE:.spec.nodeName | grep -E "NAME|Running|Evicted"
+```
+
+**What to say:** "Let's analyze what happened. All Guaranteed frontend pods are running. Backend Burstable pods are still running. But several BestEffort pods were evicted."
+
+**19. Check HPA after load subsides (wait 5+ minutes):**
+```bash
+kubectl get hpa frontend-hpa -n bin-packing-demo
+```
+**What to look for:** CPU should drop back below 70%, replica count should start to decrease
+
+**What to say:** "Now that the load is subsiding, the HPA will scale back down. But those evicted BestEffort pods? They're waiting in Pending state until there's room again, or they're just gone."
+
+**20. View the full picture:**
+```bash
+kubectl get all,hpa,vpa -n bin-packing-demo
+```
+
+---
+
+### Key Takeaways to Emphasize (10 minutes)
+
+**What to say:**
+
+"This demonstrates the reality of aggressive bin packing:
+
+✅ **The Good:**
+- Core services (frontend) remained 100% operational
+- System scaled successfully to meet demand
+- No user-facing impact
+- Significant cost savings from dense packing
+
+⚠️ **The Trade-offs:**
+- Low-priority batch jobs were evicted
+- BestEffort pods are sacrificed when system needs to grow
+- Batch processing may be delayed or interrupted
+- Some pods may never restart if there's no room
+
+🎯 **The Key Insight:**
+This is what 'aggressive bin packing' looks like in reality - it's not a complete failure, but a conscious trade-off. You save money by packing tight, but when you need to grow, you kick out the less important workloads.
+
+💡 **The Balance:**
+This works if:
+- You can identify which workloads are expendable (batch jobs, caches)
+- You're okay with batch jobs being interrupted
+- You monitor and alert on eviction rates
+- You have a plan for rescheduling evicted workloads
+
+This DOESN'T work if:
+- All your workloads are critical
+- You can't tolerate any interruption
+- You have no clear priority hierarchy
+- You're not monitoring eviction patterns"
+
+---
+
+### Commands for Monitoring (Reference)
+
+**Quick status check:**
+```bash
+kubectl get pods -n bin-packing-demo --field-selector=status.phase!=Running | wc -l
+# Shows count of non-running pods
+```
+
+**See eviction reasons:**
+```bash
+kubectl get events -n bin-packing-demo --field-selector reason=Evicted
+```
+
+**Watch specific pod types:**
+```bash
+watch 'kubectl get pods -n bin-packing-demo -l qos-class=besteffort'
+```
+
+**Check HPA history:**
+```bash
+kubectl describe hpa frontend-hpa -n bin-packing-demo | grep -A 10 Events
+```
+
+**Check node pressure:**
+```bash
+kubectl describe nodes | grep -A 5 "Conditions:"
+# Look for MemoryPressure or DiskPressure
+```
+
+---
+
+### Troubleshooting Tips
+
+**If nothing gets evicted:**
+- Check if cluster has too much spare capacity
+- Try increasing load: `{"minutes": 10, "threads": 8, "broadcastToAll": true}`
+- Or reduce node count to create more pressure
+
+**If frontend pods don't scale:**
+- Check HPA: `kubectl describe hpa frontend-hpa -n bin-packing-demo`
+- Verify metrics server is running: `kubectl get deployment metrics-server -n kube-system`
+- Check if maxReplicas was reached
+
+**If too many pods get evicted:**
+- This means you've truly hit resource limits
+- Good for demonstration! Shows the extreme case
+- Explain: "This is what happens when you push too far"
+
+---
 
 **Key Metrics:**
-- Pods per node: 10-15+ (initially)
-- Node utilization: ~90-98%
-- Cost: 75% reduction
-- Stability: **Poor** - system failure under load
+- Pods per node: 8-12 (initially) → 5-8 (after evictions)
+- Node utilization: ~70% (stable) → ~80-85% (under load)
+- Cost: 70% reduction from baseline
+- Stability: **Core works, periphery fails** - acceptable trade-off for cost-sensitive environments
+- Eviction rate: 5-10 pods evicted when frontend scales
 
 ---
 
@@ -445,11 +674,12 @@ Common failure modes:
 - Always maintain at least 25-30% node headroom
 
 ### For Cost-Sensitive Environments
-- Step 5-6 (VPA + Mixed QoS) with careful monitoring
-- Implement comprehensive alerting
+- Step 5-7 (VPA + Mixed QoS + Aggressive Packing) with careful monitoring
+- Clearly identify expendable workloads (batch jobs, caches)
+- Implement comprehensive alerting for eviction rates
 - Use Cluster Autoscaler as safety net
-- Accept higher operational complexity
-- Budget for incident response
+- Accept that non-critical workloads may be interrupted
+- Budget for incident response and rescheduling logic
 
 ## Related Tutorials
 
@@ -465,8 +695,14 @@ Bin packing in Kubernetes is a balancing act between cost efficiency and system 
 1. **Conservative approaches** (Steps 1-3) provide stability but at higher cost
 2. **Moderate optimization** (Steps 4-5) offers good balance for most workloads
 3. **Aggressive packing** (Step 6) requires sophisticated monitoring and operations
-4. **Extreme optimization** (Step 7) inevitably leads to system failure
+4. **Extreme optimization** (Step 7) shows that the core can work, but growth evicts non-critical workloads
 
 **The goal isn't to pack as tightly as possible—it's to find the right balance for your specific needs, risk tolerance, and operational maturity.**
 
-Remember: The cheapest cluster is the one that doesn't cause an outage. 💡
+Step 7 demonstrates a key insight: You CAN achieve 70% cost savings with aggressive bin packing, BUT you must accept that:
+- Non-critical workloads will be sacrificed when core services need to scale
+- Batch jobs and caches are expendable
+- The system remains functional for critical services
+- You need excellent prioritization and monitoring
+
+Remember: The cheapest cluster is the one that doesn't cause an outage to CRITICAL services. 💡
