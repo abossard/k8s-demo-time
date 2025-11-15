@@ -192,6 +192,54 @@ When working with Kubernetes manifests in the `/k8s/` directory, use these valid
 3. Verify resource creation and configuration
 4. Update deployment documentation
 
+## Kubernetes Cluster Visualization Tools
+
+For interactive terminal-based cluster visualization and monitoring, consider these TUI (Text User Interface) tools:
+
+### Terminal-Based Dashboards (TUI)
+- **K9s**: Most popular terminal dashboard with real-time monitoring
+  ```bash
+  k9s              # Launch against current context
+  :xray pod        # Show dependency graph
+  :pulse           # Top-level dashboard
+  ```
+  - Features: Interactive resource navigation, log viewing, hotkey-based navigation
+  - Pros: Fast, highly customizable, supports RBAC and plugins
+  - Best for: Power users, DevOps engineers
+
+- **KDash**: Fast, read-only terminal dashboard written in Rust
+  ```bash
+  kdash
+  ```
+  - Features: Resource inspection, metrics viewing, log streaming
+  - Uses Unicode box-drawing characters for clean UI
+  - Best for: Quick cluster monitoring without modifications
+
+- **KubeTUI**: Lightweight Kubernetes dashboard in your terminal
+  ```bash
+  kubetui
+  ```
+  - Features: Interactive resource browsing, namespace switching, YAML comparison
+  - Pros: Fast, open source, simple interface
+  - Best for: Developers wanting a lightweight CLI dashboard
+
+### Specialized Visualization
+- **helm-ascii-visualiser**: Converts Helm charts to ASCII tree diagrams
+  - Visualizes resource relationships using box-drawing characters
+  - Best for: Understanding chart structure and dependencies
+
+### AKS-Specific Tools
+- **aks-node-view**: Azure-specific tool for AKS node status and diagnostics
+  - Provides node health summaries
+  - Best for: AKS cluster scaling and scheduling diagnostics
+
+### Usage Recommendation
+For this demo application, use K9s or KDash to:
+- Monitor HPA scaling events in real-time
+- Watch pod creation/termination during autoscaling demos
+- View probe failures and container restarts
+- Inspect resource usage across replicas
+
 ## Workflow Tips
 
 - **Incremental Changes**: Make small, focused changes
@@ -199,7 +247,8 @@ When working with Kubernetes manifests in the `/k8s/` directory, use these valid
 - **Docker Builds**: Remember to specify `linux/amd64` platform
 - **Dashboard Testing**: Always check the web UI at `http://localhost:8080`
 - **Kubernetes Testing**: Use `kubectl port-forward` for local access
-- **Logs**: Check pod logs with `kubectl logs` for debugging
+- **Cluster Visualization**: Use K9s or KDash for real-time cluster monitoring
+- **Logs**: Check pod logs with `kubectl logs` for debugging or use K9s for interactive log viewing
 
 ## References
 
