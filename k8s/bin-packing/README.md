@@ -572,6 +572,412 @@ kubectl describe nodes | grep -A 5 "Conditions:"
 
 ---
 
+## 📊 K9s Monitoring Guide (Xray/Pulse Style)
+
+[k9s](https://k9scli.io/) is a terminal-based UI for Kubernetes that provides real-time visualization of cluster resources. It's perfect for observing evictions and scheduler behavior during the bin packing demonstration.
+
+### Installing k9s
+
+```bash
+# macOS
+brew install k9s
+
+# Linux
+curl -sS https://webinstall.dev/k9s | bash
+
+# Windows
+scoop install k9s
+
+# Or download binary from: https://github.com/derailed/k9s/releases
+```
+
+### Quick Start for Step 7 Demo
+
+**1. Launch k9s with namespace filter:**
+```bash
+k9s -n bin-packing-demo
+```
+
+**2. Essential k9s keyboard shortcuts:**
+```
+:pods          # View pods (or just type :po)
+:events        # View events in real-time
+:nodes         # View node resources
+:hpa           # View Horizontal Pod Autoscalers
+:deployments   # View deployments (or :dp)
+/              # Filter resources by name
+Ctrl+A         # Show all namespaces
+d              # Describe resource (when item selected)
+l              # View logs (when pod selected)
+?              # Show all keyboard shortcuts
+```
+
+---
+
+### Step-by-Step k9s Observation Guide
+
+#### Phase 1: Pre-Load State (Before triggering stress)
+
+**View 1: Pods Overview**
+```bash
+k9s -n bin-packing-demo
+:pods
+```
+**What to observe:**
+- All pods should show `Running` status in green
+- Look at the `Ready` column: should show `1/1`
+- Note the `Restarts` column: should be 0 or low
+- Check `Age`: all pods should be roughly the same age
+- **QoS indicator**: k9s shows QoS class in the labels
+
+**Pro tip:** Press `0` to show labels column, look for `qos-class` label
+
+**What to say:** "Here we see all 20 pods running. The frontend and backend are stable, and we have many worker, cache, and analytics pods filling available space."
+
+---
+
+**View 2: Nodes - Resource Allocation**
+```bash
+:nodes
+# Then press '1' to toggle resource usage columns
+```
+**What to observe:**
+- `CPU%` column: Should show ~60-75% usage
+- `MEM%` column: Should show ~60-75% usage
+- `CPU/R` and `CPU/L`: Requests vs Limits allocation
+- `MEM/R` and `MEM/L`: Requests vs Limits allocation
+
+**What to look for:**
+- High allocation % but moderate actual usage %
+- This shows aggressive bin packing: lots of requests allocated, but not all used
+
+**What to say:** "Notice the difference between allocated (requests) and actual usage. This is the bin packing opportunity - we've reserved space efficiently."
+
+---
+
+**View 3: HPA Status**
+```bash
+:hpa
+```
+**What to observe:**
+- `MINPODS` / `MAXPODS` / `REPLICAS`: Should show 2/8/2 for frontend
+- `TARGETS`: Should show current vs target utilization (e.g., `15%/70%`)
+- Status should be green/OK
+
+**What to say:** "HPA is watching CPU and memory metrics. Currently well below threshold."
+
+---
+
+#### Phase 2: During Load (After triggering CPU stress)
+
+**Open k9s in split-screen mode or multiple terminals:**
+
+**Terminal 1 - Watch Pods:**
+```bash
+k9s -n bin-packing-demo
+:pods
+# Press 's' to toggle auto-refresh speed (faster updates)
+```
+
+**Terminal 2 - Watch Events:**
+```bash
+k9s -n bin-packing-demo
+:events
+# Events appear at the top (newest first)
+```
+
+**Terminal 3 - Watch Nodes:**
+```bash
+k9s
+:nodes
+# Press '1' to show resource utilization
+```
+
+---
+
+**View 4: Watching HPA Scale Decision (30-60 seconds after load)**
+
+In pods view (`:pods`):
+**What to observe:**
+- **Color changes**: Frontend pods may turn yellow (warning) if CPU is high
+- **Status updates**: Watch for `Pending` status as HPA creates new pods
+- **CPU column** (press `Shift+C` to sort by CPU): Frontend pods climb to 80-90%
+
+**What to say:** "See the frontend pods' CPU usage climbing. k9s shows this in real-time with color coding - yellow means high utilization."
+
+In HPA view (`:hpa`):
+**What to observe:**
+- `TARGETS` column updates: `85%/70%` (current over target)
+- `REPLICAS` column changes: `2` → `4`
+- Color may change to indicate scaling action
+
+**What to say:** "The HPA has detected high CPU and decided to scale. Watch the replica count increase."
+
+---
+
+**View 5: Observing Pod Evictions (KEY MOMENT!)**
+
+In events view (`:events`):
+**What to observe - The critical eviction sequence:**
+
+```
+TYPE     REASON              OBJECT                           MESSAGE
+Warning  FailedScheduling    Pod/frontend-xxx-yyy            0/3 nodes available: insufficient cpu
+Normal   TriggeredScaleUp    HorizontalPodAutoscaler/frontend Scaled up from 2 to 4
+Warning  Evicted             Pod/worker-xxx                   Pod evicted due to node resource pressure
+Normal   Killing             Pod/worker-xxx                   Stopping container k8s-demo-app
+Normal   Scheduled           Pod/frontend-xxx-zzz            Successfully assigned to node-2
+Normal   Pulling             Pod/frontend-xxx-zzz            Pulling image...
+Normal   Started             Pod/frontend-xxx-zzz            Started container
+```
+
+**Key events to highlight:**
+1. `FailedScheduling` - Scheduler can't place new frontend pod (no space)
+2. `Evicted` - Worker/cache pod gets kicked out (BestEffort QoS)
+3. `Scheduled` - New frontend pod gets the freed-up space
+4. `Killing` - Old low-priority pod is terminated
+
+**What to say:** "HERE'S THE MAGIC! The scheduler couldn't place new frontend pods, so it evicted low-priority BestEffort pods to make room. This is bin packing in action - we prioritized critical services."
+
+**Pro tip:** Press `Enter` on an event to see full details
+
+---
+
+**View 6: Pod Status Changes**
+
+In pods view (`:pods`), press `/` and filter by `worker` or `cache`:
+**What to observe:**
+- Some pods transition to `Evicted` status (red)
+- Status shows: `Evicted` reason
+- Age resets when pods are recreated
+- `Restarts` count may increase
+
+**Visual indicators in k9s:**
+- 🟢 Green: Running normally
+- 🟡 Yellow: Warning state (high resource usage)
+- 🔴 Red: Failed/Evicted
+- ⚪ White: Pending/Creating
+
+**What to say:** "Notice the color changes - red pods are evicted. But look at the frontend - all green, all running. The core service is stable."
+
+---
+
+**View 7: Node Pressure Indicators**
+
+In nodes view (`:nodes`), press `d` on a node with evictions:
+**What to observe in the Description:**
+```
+Conditions:
+  Type             Status  Reason
+  ----             ------  ------
+  MemoryPressure   False   KubeletHasSufficientMemory
+  DiskPressure     False   KubeletHasNoDiskPressure
+  PIDPressure      False   KubeletHasSufficientPID
+  Ready            True    KubeletReady
+
+Allocated resources:
+  (Total limits may be over 100%)
+  Resource           Requests     Limits
+  --------           --------     ------
+  cpu                2500m (62%)  8000m (200%)
+  memory             4Gi (50%)    12Gi (150%)
+```
+
+**What to look for:**
+- `Requests` vs `Limits` show overcommitment
+- CPU/Memory `Limits` may exceed 100% (overcommitted)
+- Conditions show node health
+
+**What to say:** "The node is healthy, but notice the overcommitment: 200% CPU limits means we're packing more than physically possible. This works because most pods don't use their limits simultaneously."
+
+---
+
+#### Phase 3: Post-Eviction Analysis
+
+**View 8: Checking Which Pods Were Evicted**
+
+```bash
+:pods
+# Press '/' and filter: evicted
+# Or sort by status: press 'Shift+S'
+```
+
+**What to observe:**
+- List of evicted pods (all should be BestEffort QoS)
+- None should be frontend (Guaranteed) or backend (Burstable)
+- Pods stuck in `Pending` state waiting for resources
+
+**Commands in k9s:**
+- Press `d` on an evicted pod to see detailed reason
+- Press `l` to see logs (if container ran before eviction)
+- Press `y` to see YAML definition
+
+**What to say:** "All evicted pods are low-priority workers and caches. The system protected critical services and sacrificed expendable workloads."
+
+---
+
+**View 9: Verify Frontend Service Stability**
+
+```bash
+:pods
+# Filter by 'frontend' 
+```
+**What to observe:**
+- All frontend pods: `Running` and green
+- `Ready` column: `1/1`
+- `Restarts`: 0 (no restarts during scale-up)
+- CPU % should be lower now (load distributed across 4 pods)
+
+In deployments view (`:dp`):
+```bash
+:deployments
+```
+**What to observe:**
+- `DESIRED` vs `CURRENT` vs `READY`: Should all match (e.g., 4/4/4)
+- `UP-TO-DATE`: Shows all pods are on latest spec
+- `AVAILABLE`: Shows how many are serving traffic
+
+**What to say:** "Frontend scaled successfully from 2 to 4 pods, all healthy. Service is responding perfectly despite the chaos behind the scenes."
+
+---
+
+### Advanced k9s Features for Deep Analysis
+
+**Xray View - Cluster Resource Topology:**
+```bash
+# From any view, press 'Shift+X' for Xray mode
+:xray deployments
+:xray nodes
+```
+**What this shows:**
+- Visual tree of resource relationships
+- Deployment → ReplicaSet → Pods
+- Node → Pods mapping
+- Great for seeing which pods are on which nodes
+
+**What to say:** "Xray view shows the pod distribution across nodes. See how evictions created space for frontend pods."
+
+---
+
+**Pulse View - Real-time Metrics:**
+```bash
+# In pods view, press 'Shift+P' for pulse view
+:pods
+# Then 'Shift+P'
+```
+**What this shows:**
+- Live CPU/Memory graphs per pod
+- Color-coded bars showing resource usage over time
+- Spikes and trends visible
+
+**What to say:** "Pulse view gives us live metrics. Watch the frontend pods' CPU spike when we trigger load, then HPA scales and distributes the load."
+
+---
+
+**PortForward from k9s:**
+```bash
+# In pods view, select a frontend pod
+# Press 'Shift+F' to create port-forward
+# Enter local port: 8080
+# Enter container port: 8080
+```
+**Use case:** Quickly access the dashboard without separate kubectl command
+
+---
+
+**Logs Streaming:**
+```bash
+# In pods view, select any pod
+# Press 'l' for logs
+# Press 'w' to toggle wrap
+# Press '0' to show timestamps
+# Press 's' to toggle auto-follow
+```
+**What to observe during stress:**
+- Application logs showing stress test starting/ending
+- Health check responses
+- Resource allocation messages
+
+---
+
+### k9s Color Legend
+
+Understanding k9s status colors:
+- 🟢 **Green**: Healthy, running normally
+- 🟡 **Yellow**: Warning (high resource usage, not ready yet)
+- 🔴 **Red**: Failed, evicted, crashed
+- 🔵 **Blue**: Selected/highlighted item
+- ⚪ **White/Gray**: Pending, creating, terminating
+
+---
+
+### k9s Cheat Sheet for This Demo
+
+| View | Command | What to Watch |
+|------|---------|---------------|
+| **Pods** | `:pods` | Status changes, evictions (red), new pods (creating) |
+| **Events** | `:events` | Eviction events, scheduling failures, scale events |
+| **Nodes** | `:nodes` + `1` | CPU/Memory %, allocation vs usage |
+| **HPA** | `:hpa` | Target metrics, replica count changes |
+| **Deployments** | `:dp` | Desired vs current replicas |
+| **Xray** | `Shift+X` | Resource topology and relationships |
+| **Pulse** | `Shift+P` | Real-time CPU/Memory graphs |
+
+**Filtering tips:**
+- `/frontend` - Show only frontend resources
+- `/qos-class=besteffort` - Show only BestEffort pods (those that will be evicted)
+- `:events evicted` - Show only eviction events
+
+---
+
+### Presenter Tips for k9s Demo
+
+**Best setup for live demo:**
+
+**Monitor 1 - Main screen (projector):**
+- Browser with k8s-demo-app dashboard for triggering load
+- Shows the "control panel" to audience
+
+**Monitor 2 - Side screen (optional but impressive):**
+- Split terminal with 4 k9s views:
+  - Top-left: `:pods` view (watch evictions)
+  - Top-right: `:events` view (see eviction events)
+  - Bottom-left: `:hpa` view (watch scaling)
+  - Bottom-right: `:nodes` view with `1` pressed (resource usage)
+
+**Narration flow:**
+1. "Let me show you our packed cluster in k9s..."
+2. "Watch these terminal windows as I trigger load..."
+3. "There! The HPA is scaling up..."
+4. "And now - see the red pods? Those are evictions happening in real-time..."
+5. "But notice - all frontend pods stay green, healthy, serving traffic..."
+
+**Pro tip:** Practice the demo once to know which k9s views to have open when. The visual impact of seeing evictions in real-time with color coding is powerful.
+
+---
+
+### Alternative: k9s Recording for Documentation
+
+Record your k9s session for documentation:
+```bash
+# Install asciinema
+brew install asciinema  # macOS
+apt-get install asciinema  # Linux
+
+# Record your k9s session
+asciinema rec k9s-bin-packing-demo.cast
+k9s -n bin-packing-demo
+# Perform your demo
+# Press Ctrl+D to stop recording
+
+# Play it back
+asciinema play k9s-bin-packing-demo.cast
+```
+
+This creates a terminal recording you can share with others or embed in documentation.
+
+---
+
 ### Step 8: Cleanup
 
 Remove all resources:
