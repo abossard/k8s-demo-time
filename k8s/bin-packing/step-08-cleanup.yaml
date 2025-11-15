@@ -1,0 +1,10 @@
+# Cleanup all bin-packing tutorial resources
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bin-packing-demo
+  labels:
+    tutorial.k8s-demo/component: bin-packing
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"Namespace","metadata":{"name":"bin-packing-demo","labels":{"tutorial.k8s-demo/component":"bin-packing"}}}

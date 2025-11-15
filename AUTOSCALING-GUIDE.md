@@ -8,6 +8,7 @@ Learn how to:
 - **Vertically scale** pods with VPA (Vertical Pod Autoscaler)
 - **Horizontally scale** pods with HPA (Horizontal Pod Autoscaler)
 - **Prioritize evictions** under resource pressure using QoS classes
+- **Optimize bin packing** to reduce costs while understanding trade-offs
 - **Combine strategies** for optimal resource utilization
 
 ## Repository Structure
@@ -40,6 +41,17 @@ k8s/
 │   ├── step-04-mixed-qos-eviction-demo.yaml
 │   ├── step-05-priority-classes.yaml
 │   └── step-06-cleanup.yaml
+│
+├── bin-packing/            # Bin packing and cost optimization
+│   ├── README.md          # Complete bin packing tutorial
+│   ├── step-01-static-vm-like.yaml
+│   ├── step-02-qos-aware.yaml
+│   ├── step-03-with-limits.yaml
+│   ├── step-04-with-hpa.yaml
+│   ├── step-05-with-vpa.yaml
+│   ├── step-06-mixed-qos.yaml
+│   ├── step-07-extreme-packing.yaml
+│   └── step-08-cleanup.yaml
 │
 └── combined/               # Combined demonstrations
     ├── README.md          # How to combine VPA, HPA, and QoS
@@ -108,7 +120,33 @@ QOS:.status.qosClass
 kubectl get pods -n qos-demo -w
 ```
 
-### 4. Combined Demo (Everything together)
+### 4. Bin Packing Tutorial (Cost vs. Stability)
+
+```bash
+# Start with static VM-like deployment
+kubectl apply -f k8s/bin-packing/step-01-static-vm-like.yaml
+
+# Progress through optimization steps
+kubectl apply -f k8s/bin-packing/step-02-qos-aware.yaml
+kubectl apply -f k8s/bin-packing/step-04-with-hpa.yaml
+
+# Watch node utilization improve
+kubectl top nodes
+
+# Try extreme packing (demonstration only!)
+kubectl apply -f k8s/bin-packing/step-07-extreme-packing.yaml
+
+# Generate load and observe the "card house collapse"
+kubectl port-forward svc/frontend -n bin-packing-demo 8080:80
+curl -X POST http://localhost:8080/api/stress/cpu \
+  -H "Content-Type: application/json" \
+  -d '{"minutes": 10, "threads": 16, "broadcastToAll": true}'
+
+# Watch the cascade of failures
+kubectl get events -n bin-packing-demo --sort-by='.lastTimestamp' -w
+```
+
+### 5. Combined Demo (Everything together)
 
 ```bash
 # Deploy complete demonstration

@@ -1,0 +1,733 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bin-packing-demo
+  labels:
+    tutorial.k8s-demo/component: bin-packing
+---
+# Step 7: EXTREME BIN PACKING - The Card House
+# WARNING: This is intentionally unstable to demonstrate failure modes
+# DO NOT USE IN PRODUCTION!
+#
+# This configuration:
+# - Uses minimal resource requests
+# - Runs many BestEffort pods
+# - Has very aggressive HPA and VPA settings
+# - Prioritizes cost over stability
+# - Will fail catastrophically under load
+
+# Frontend - Still Guaranteed but with minimal resources
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: bin-packing-demo
+  labels:
+    app: frontend
+    tier: frontend
+    priority: critical
+    tutorial-step: "07-extreme"
+  annotations:
+    description: "EXTREME: Minimal Guaranteed QoS"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        tier: frontend
+        qos-class: guaranteed
+        priority: critical
+    spec:
+      priorityClassName: high-priority
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "frontend-headless"
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.memory
+          ports:
+            - name: http
+              containerPort: 8080
+          # EXTREME: Minimal Guaranteed resources
+          resources:
+            requests:
+              cpu: "250m"      # Very low for Guaranteed
+              memory: "256Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+# Backend - Aggressive Burstable with tiny requests
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: bin-packing-demo
+  labels:
+    app: backend
+    tier: backend
+    priority: normal
+    tutorial-step: "07-extreme"
+  annotations:
+    description: "EXTREME: Tiny requests, high limits"
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        tier: backend
+        qos-class: burstable
+        priority: normal
+    spec:
+      priorityClassName: normal-priority
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "backend-headless"
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.memory
+          ports:
+            - name: http
+              containerPort: 8080
+          # EXTREME: Minimal requests, limits way higher
+          resources:
+            requests:
+              cpu: "50m"       # Dangerously low
+              memory: "128Mi"
+            limits:
+              cpu: "2000m"     # 40x CPU request!
+              memory: "2Gi"    # 16x memory request!
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+# Worker - Many BestEffort pods
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: bin-packing-demo
+  labels:
+    app: worker
+    tier: worker
+    priority: low
+    tutorial-step: "07-extreme"
+  annotations:
+    description: "EXTREME: Many BestEffort pods"
+spec:
+  replicas: 8  # Many pods, no resources!
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+        tier: worker
+        qos-class: besteffort
+        priority: low
+    spec:
+      priorityClassName: low-priority
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "worker-headless"
+          ports:
+            - name: http
+              containerPort: 8080
+          # BestEffort: NO resources
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+# Cache - BestEffort
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache
+  namespace: bin-packing-demo
+  labels:
+    app: cache
+    tier: cache
+    priority: low
+    tutorial-step: "07-extreme"
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: cache
+  template:
+    metadata:
+      labels:
+        app: cache
+        tier: cache
+        qos-class: besteffort
+        priority: low
+    spec:
+      priorityClassName: low-priority
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "cache-headless"
+          ports:
+            - name: http
+              containerPort: 8080
+          # BestEffort
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+# Analytics - BestEffort
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics
+  namespace: bin-packing-demo
+  labels:
+    app: analytics
+    tier: analytics
+    priority: low
+    tutorial-step: "07-extreme"
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: analytics
+  template:
+    metadata:
+      labels:
+        app: analytics
+        tier: analytics
+        qos-class: besteffort
+        priority: low
+    spec:
+      priorityClassName: low-priority
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "analytics-headless"
+          ports:
+            - name: http
+              containerPort: 8080
+          # BestEffort
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+# Priority Classes
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+value: 1000000
+globalDefault: false
+description: "High priority for critical services"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: normal-priority
+value: 1000
+globalDefault: false
+description: "Normal priority for standard services"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority
+value: 100
+globalDefault: false
+description: "Low priority for batch and cache"
+---
+# EXTREME VPA - Very tight bounds
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: frontend-vpa
+  namespace: bin-packing-demo
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: frontend
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: k8s-demo-app
+        minAllowed:
+          cpu: "100m"
+          memory: "128Mi"
+        maxAllowed:
+          cpu: "400m"      # Very tight maximum
+          memory: "384Mi"
+        controlledResources:
+          - cpu
+          - memory
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: backend-vpa
+  namespace: bin-packing-demo
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: k8s-demo-app
+        minAllowed:
+          cpu: "25m"       # Extremely low
+          memory: "64Mi"
+        maxAllowed:
+          cpu: "200m"      # Not much headroom
+          memory: "256Mi"
+        controlledResources:
+          - cpu
+          - memory
+---
+# EXTREME HPA - Very aggressive
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: frontend-hpa
+  namespace: bin-packing-demo
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: frontend
+  minReplicas: 2
+  maxReplicas: 15  # High max
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 85  # Very high threshold
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 90  # Dangerously high
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 15  # Scale up very fast
+      policies:
+        - type: Percent
+          value: 200  # Triple capacity
+          periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 60  # Scale down fast too
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 30
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: bin-packing-demo
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 90  # Extreme
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 95  # Will cause OOMs
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 10
+      policies:
+        - type: Percent
+          value: 300
+          periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 3
+          periodSeconds: 15
+---
+# Services
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: bin-packing-demo
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-headless
+  namespace: bin-packing-demo
+  labels:
+    app: frontend
+spec:
+  clusterIP: None
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: bin-packing-demo
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-headless
+  namespace: bin-packing-demo
+  labels:
+    app: backend
+spec:
+  clusterIP: None
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  namespace: bin-packing-demo
+  labels:
+    app: worker
+spec:
+  selector:
+    app: worker
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-headless
+  namespace: bin-packing-demo
+  labels:
+    app: worker
+spec:
+  clusterIP: None
+  selector:
+    app: worker
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cache
+  namespace: bin-packing-demo
+  labels:
+    app: cache
+spec:
+  selector:
+    app: cache
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cache-headless
+  namespace: bin-packing-demo
+  labels:
+    app: cache
+spec:
+  clusterIP: None
+  selector:
+    app: cache
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics
+  namespace: bin-packing-demo
+  labels:
+    app: analytics
+spec:
+  selector:
+    app: analytics
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-headless
+  namespace: bin-packing-demo
+  labels:
+    app: analytics
+spec:
+  clusterIP: None
+  selector:
+    app: analytics
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

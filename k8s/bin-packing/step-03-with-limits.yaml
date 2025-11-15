@@ -1,0 +1,379 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bin-packing-demo
+  labels:
+    tutorial.k8s-demo/component: bin-packing
+---
+# Step 3: With Resource Limits for Bursting
+# Allows pods to use more than requested when node has capacity
+# Enables denser packing while maintaining burst capability
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: bin-packing-demo
+  labels:
+    app: frontend
+    tier: frontend
+    tutorial-step: "03-with-limits"
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        tier: frontend
+        qos-class: burstable
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "frontend-headless"
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.memory
+          ports:
+            - name: http
+              containerPort: 8080
+          # Burstable: Lower requests, higher limits
+          # Scheduler uses requests for placement
+          resources:
+            requests:
+              cpu: "500m"      # Typical usage
+              memory: "512Mi"
+            limits:
+              cpu: "1500m"     # Can burst to 1.5 CPU
+              memory: "1Gi"    # Can burst to 1GB
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: bin-packing-demo
+  labels:
+    app: backend
+    tier: backend
+    tutorial-step: "03-with-limits"
+spec:
+  replicas: 5  # Can pack more with lower requests
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        tier: backend
+        qos-class: burstable
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "backend-headless"
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.memory
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: "300m"      # Lower baseline
+              memory: "384Mi"
+            limits:
+              cpu: "1000m"     # 3x burst capacity
+              memory: "768Mi"  # 2x burst capacity
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+# Add a worker deployment (batch processing)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: bin-packing-demo
+  labels:
+    app: worker
+    tier: worker
+    tutorial-step: "03-with-limits"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+        tier: worker
+        qos-class: burstable
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_NAME
+              value: "worker-headless"
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.memory
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "2000m"     # Can burst high for batch jobs
+              memory: "1Gi"
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+# Services
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: bin-packing-demo
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-headless
+  namespace: bin-packing-demo
+  labels:
+    app: frontend
+spec:
+  clusterIP: None
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: bin-packing-demo
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-headless
+  namespace: bin-packing-demo
+  labels:
+    app: backend
+spec:
+  clusterIP: None
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  namespace: bin-packing-demo
+  labels:
+    app: worker
+spec:
+  selector:
+    app: worker
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-headless
+  namespace: bin-packing-demo
+  labels:
+    app: worker
+spec:
+  clusterIP: None
+  selector:
+    app: worker
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
