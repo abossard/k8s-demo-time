@@ -63,6 +63,28 @@ docker build --platform linux/amd64 -t k8s-demo-app:local .
 - API endpoints can be tested using the provided `K8sDemoApp.http` file
 - No automated unit test suite is currently present
 
+### Kubernetes YAML Validation
+When working with Kubernetes manifests in the `/k8s/` directory, use these validation tools:
+
+- **yamllint**: For YAML syntax and formatting validation
+  ```bash
+  yamllint k8s/*.yaml
+  ```
+- **kubeconform**: For Kubernetes schema validation (recommended over kubeval)
+  ```bash
+  kubeconform -summary k8s/*.yaml
+  ```
+- **kube-linter**: For best practices and security checks
+  ```bash
+  kube-linter lint k8s/
+  ```
+- **ValidKube**: Online comprehensive validator at https://validkube.com/
+- **kubectl**: Built-in dry-run validation
+  ```bash
+  kubectl apply --dry-run=client -f k8s/deployment.yaml
+  kubectl apply --dry-run=server -f k8s/deployment.yaml
+  ```
+
 ## Code Style and Conventions
 
 ### General Guidelines
@@ -125,7 +147,11 @@ docker build --platform linux/amd64 -t k8s-demo-app:local .
 4. Consider backward compatibility
 
 ### When Changing Kubernetes Manifests
-1. Validate YAML syntax
+1. Validate YAML syntax using one or more of these tools:
+   - `yamllint` for syntax and formatting checks
+   - `kubeconform` or `kubeval` for Kubernetes schema validation
+   - `kube-linter` for best practices and security checks
+   - Online tools like ValidKube for comprehensive validation
 2. Test resource requests/limits for HPA demos
 3. Ensure probe configurations remain functional
 4. Update related tutorial documentation
