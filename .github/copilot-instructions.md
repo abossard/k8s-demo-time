@@ -63,6 +63,28 @@ docker build --platform linux/amd64 -t k8s-demo-app:local .
 - API endpoints can be tested using the provided `K8sDemoApp.http` file
 - No automated unit test suite is currently present
 
+### Kubernetes YAML Validation
+When working with Kubernetes manifests in the `/k8s/` directory, use these validation tools:
+
+- **yamllint**: For YAML syntax and formatting validation
+  ```bash
+  yamllint k8s/*.yaml
+  ```
+- **kubeconform**: For Kubernetes schema validation (recommended over kubeval)
+  ```bash
+  kubeconform -summary k8s/*.yaml
+  ```
+- **kube-linter**: For best practices and security checks
+  ```bash
+  kube-linter lint k8s/
+  ```
+- **ValidKube**: Online comprehensive validator at https://validkube.com/
+- **kubectl**: Built-in dry-run validation
+  ```bash
+  kubectl apply --dry-run=client -f k8s/deployment.yaml
+  kubectl apply --dry-run=server -f k8s/deployment.yaml
+  ```
+
 ## Code Style and Conventions
 
 ### General Guidelines
@@ -125,7 +147,11 @@ docker build --platform linux/amd64 -t k8s-demo-app:local .
 4. Consider backward compatibility
 
 ### When Changing Kubernetes Manifests
-1. Validate YAML syntax
+1. Validate YAML syntax using one or more of these tools:
+   - `yamllint` for syntax and formatting checks
+   - `kubeconform` or `kubeval` for Kubernetes schema validation
+   - `kube-linter` for best practices and security checks
+   - Online tools like ValidKube for comprehensive validation
 2. Test resource requests/limits for HPA demos
 3. Ensure probe configurations remain functional
 4. Update related tutorial documentation
@@ -166,6 +192,116 @@ docker build --platform linux/amd64 -t k8s-demo-app:local .
 3. Verify resource creation and configuration
 4. Update deployment documentation
 
+## Kubernetes Cluster Visualization Tools
+
+For interactive terminal-based cluster visualization and monitoring, consider these TUI (Text User Interface) tools:
+
+### Terminal-Based Dashboards (TUI)
+- **K9s**: Most popular terminal dashboard with real-time monitoring
+  ```bash
+  k9s              # Launch against current context
+  :xray pod        # Show dependency graph
+  :pulse           # Top-level dashboard
+  :nodes           # View node resources and pressure
+  /Evicted         # Filter evicted pods
+  /Pending         # Filter unscheduled/pending pods
+  /OOMKilled       # Filter OOM killed containers
+  Shift-M          # Sort by memory usage
+  Shift-C          # Sort by CPU usage
+  d                # Describe resource (shows eviction/OOM reasons)
+  ```
+  - Features: Interactive resource navigation, log viewing, hotkey-based navigation
+  - Troubleshooting capabilities:
+    - Filter pods by status (Evicted, Pending, Failed, OOMKilled)
+    - View node resource usage and memory pressure conditions
+    - Inspect exit codes (137 = OOMKilled) and eviction reasons
+    - Sort pods/nodes by resource consumption
+  - Pros: Fast, highly customizable, supports RBAC and plugins
+  - Best for: Power users, DevOps engineers, troubleshooting resource issues
+
+- **KubeTUI**: Feature-rich TUI with advanced filtering
+  ```bash
+  kubetui
+  ```
+  - Features: 
+    - Customizable column views for pod status (Evicted, OOMKilled, Pending)
+    - Multi-namespace filtering and searching
+    - Real-time node metrics and resource tracking
+    - Container logs with filtering capabilities
+  - Troubleshooting capabilities:
+    - Quickly identify unscheduled pods stuck in Pending state
+    - Track evicted pods and their eviction reasons
+    - Monitor node-level resource usage (CPU, memory, disk)
+    - View memory pressure and OOM events
+  - Pros: Highly customizable, mouse support, intuitive interface
+  - Best for: DevOps engineers needing detailed pod/node diagnostics
+
+- **KubePulse**: Real-time cluster health monitoring
+  ```bash
+  kubepulse
+  ```
+  - Features:
+    - Live pod status updates with resource usage (CPU/memory)
+    - Node condition monitoring (MemoryPressure, DiskPressure, PIDPressure)
+    - Interactive navigation with keyboard shortcuts
+    - Namespace switching for multi-tenant clusters
+  - Troubleshooting capabilities:
+    - Identify nodes experiencing resource pressure
+    - Monitor pods at risk of eviction
+    - Track resource exhaustion events
+  - Pros: Focused on health and resource metrics
+  - Best for: Quick cluster health checks and resource diagnostics
+
+- **KDash**: Fast, read-only terminal dashboard written in Rust
+  ```bash
+  kdash
+  ```
+  - Features: Resource inspection, metrics viewing, log streaming
+  - Uses Unicode box-drawing characters for clean UI
+  - Best for: Quick cluster monitoring without modifications
+
+### Specialized Visualization
+- **helm-ascii-visualiser**: Converts Helm charts to ASCII tree diagrams
+  - Visualizes resource relationships using box-drawing characters
+  - Best for: Understanding chart structure and dependencies
+
+### AKS-Specific Tools
+- **aks-node-view**: Azure-specific tool for AKS node status and diagnostics
+  - Provides node health summaries
+  - Best for: AKS cluster scaling and scheduling diagnostics
+
+### Usage Recommendation
+For this demo application, use K9s, KubeTUI, or KubePulse to:
+- Monitor HPA scaling events in real-time
+- Watch pod creation/termination during autoscaling demos
+- View probe failures and container restarts
+- Inspect resource usage across replicas
+
+### Troubleshooting Common Issues
+Use TUI tools to diagnose typical Kubernetes resource problems:
+
+**Unscheduled Pods (Pending state)**:
+- K9s: Use `/Pending` filter, then press `d` to see scheduling failure reasons
+- KubeTUI: Filter by pod phase, check columns for "reason" field
+- Common causes: Insufficient CPU/memory, node taints, missing node selectors
+
+**Evicted Pods (Failed state with Evicted reason)**:
+- K9s: Use `/Evicted` filter to find all evicted pods
+- KubeTUI: Customize columns to show eviction reasons
+- KubePulse: Check node conditions for MemoryPressure, DiskPressure
+- Common causes: Node memory pressure, disk pressure, PID pressure
+
+**OOMKilled Containers (Exit code 137)**:
+- K9s: Use `/OOMKilled` filter or check exit codes with `d` (describe)
+- KubeTUI: View container status and termination reasons
+- Cause: Container exceeded memory limit, kernel OOM killer terminated process
+- Solution: Increase memory limits or optimize application memory usage
+
+**Node Resource Pressure**:
+- K9s: Use `:nodes` view, sort with `Shift-M` (memory) or `Shift-C` (CPU)
+- KubePulse: Monitor node conditions and resource metrics in real-time
+- Watch for: MemoryPressure, DiskPressure conditions that trigger evictions
+
 ## Workflow Tips
 
 - **Incremental Changes**: Make small, focused changes
@@ -173,7 +309,8 @@ docker build --platform linux/amd64 -t k8s-demo-app:local .
 - **Docker Builds**: Remember to specify `linux/amd64` platform
 - **Dashboard Testing**: Always check the web UI at `http://localhost:8080`
 - **Kubernetes Testing**: Use `kubectl port-forward` for local access
-- **Logs**: Check pod logs with `kubectl logs` for debugging
+- **Cluster Visualization**: Use K9s or KDash for real-time cluster monitoring
+- **Logs**: Check pod logs with `kubectl logs` for debugging or use K9s for interactive log viewing
 
 ## References
 
