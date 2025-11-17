@@ -1,0 +1,9 @@
+RG_NAME="anbo-k8s-demo"
+LOCATION="swedencentral"
+CLUSTER_NAME="k8s-demo-cluster-1"
+
+az group create --name $RG_NAME --location $LOCATION
+az aks create --resource-group $RG_NAME --name $CLUSTER_NAME --location $LOCATION
+az aks get-credentials --resource-group $RG_NAME --name $CLUSTER_NAME
+
+az group delete --name $RG_NAME --yes --no-wait

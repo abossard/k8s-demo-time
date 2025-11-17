@@ -19,7 +19,7 @@ metadata:
     tier: frontend
     tutorial-step: "02-qos-aware"
 spec:
-  replicas: 4
+  replicas: 3
   selector:
     matchLabels:
       app: frontend
@@ -71,14 +71,14 @@ spec:
             - name: http
               containerPort: 8080
           # Guaranteed QoS: requests == limits
-          # Still generous but signals this is critical
+          # Generous for critical service (~32% of node)
           resources:
             requests:
-              cpu: "1000m"
-              memory: "1Gi"
+              cpu: "600m"       # ~32% of 1900m CPU
+              memory: "900Mi"   # ~31% of 2856Mi RAM
             limits:
-              cpu: "1000m"
-              memory: "1Gi"
+              cpu: "600m"
+              memory: "900Mi"
           startupProbe:
             httpGet:
               path: /health/startup
@@ -113,7 +113,7 @@ metadata:
     tier: backend
     tutorial-step: "02-qos-aware"
 spec:
-  replicas: 4  # Can deploy more with Burstable
+  replicas: 4  # Can deploy more with Burstable QoS
   selector:
     matchLabels:
       app: backend
@@ -165,14 +165,14 @@ spec:
             - name: http
               containerPort: 8080
           # Burstable QoS: requests < limits
-          # Lower requests allow better bin packing
+          # Lower requests enable better bin packing
           resources:
             requests:
-              cpu: "500m"     # Lower request
-              memory: "512Mi"
+              cpu: "300m"      # ~16% of node - allows multiple per node
+              memory: "400Mi"  # ~14% of node
             limits:
-              cpu: "800m"     # Can burst higher
-              memory: "768Mi"
+              cpu: "700m"      # Can burst to ~37%
+              memory: "800Mi"  # Can burst to ~28%
           startupProbe:
             httpGet:
               path: /health/startup

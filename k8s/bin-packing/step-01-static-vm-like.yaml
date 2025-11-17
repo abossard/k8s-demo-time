@@ -18,7 +18,7 @@ metadata:
     tier: frontend
     tutorial-step: "01-static"
 spec:
-  replicas: 4  # Fixed, no autoscaling
+  replicas: 3  # Fixed, 1 per node on small cluster
   selector:
     matchLabels:
       app: frontend
@@ -69,14 +69,14 @@ spec:
             - name: http
               containerPort: 8080
           # Guaranteed QoS: requests == limits
-          # Very generous allocation like a VM
+          # Conservative VM-like allocation (~33% of node)
           resources:
             requests:
-              cpu: "1000m"       # 1 full CPU
-              memory: "1Gi"      # 1 GB RAM
+              cpu: "500m"        # ~32% of 1900m CPU
+              memory: "900Mi"    # ~31% of 2856Mi RAM
             limits:
-              cpu: "1000m"       # Same as request = Guaranteed
-              memory: "1Gi"      # Same as request = Guaranteed
+              cpu: "500m"        # Same as request = Guaranteed
+              memory: "900Mi"    # Same as request = Guaranteed
           startupProbe:
             httpGet:
               path: /health/startup
@@ -110,7 +110,7 @@ metadata:
     tier: backend
     tutorial-step: "01-static"
 spec:
-  replicas: 3  # Fixed
+  replicas: 3  # Fixed, share nodes with frontend
   selector:
     matchLabels:
       app: backend
@@ -162,11 +162,11 @@ spec:
               containerPort: 8080
           resources:
             requests:
-              cpu: "800m"
-              memory: "768Mi"
+              cpu: "500m"       # ~26% of node capacity
+              memory: "700Mi"   # ~24% of node capacity
             limits:
-              cpu: "800m"
-              memory: "768Mi"
+              cpu: "500m"
+              memory: "700Mi"
           startupProbe:
             httpGet:
               path: /health/startup

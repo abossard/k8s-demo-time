@@ -86,11 +86,11 @@ spec:
           # Guaranteed QoS but sized for actual baseline needs
           resources:
             requests:
-              cpu: "300m"      # Enough for normal operation
-              memory: "384Mi"
+              cpu: "200m"      # ~10% of node - minimal for baseline
+              memory: "300Mi"  # ~10% of node
             limits:
-              cpu: "300m"
-              memory: "384Mi"
+              cpu: "200m"
+              memory: "300Mi"
           startupProbe:
             httpGet:
               path: /health/startup
@@ -183,11 +183,11 @@ spec:
           # Burstable: Very low requests but reasonable limits
           resources:
             requests:
-              cpu: "100m"      # Minimal baseline
-              memory: "192Mi"
+              cpu: "50m"       # Minimal baseline (~3% of node)
+              memory: "150Mi"  # ~5% of node
             limits:
-              cpu: "1000m"     # Can burst 10x
-              memory: "1Gi"    # Can burst ~5x
+              cpu: "700m"      # Can burst to ~37%
+              memory: "700Mi"  # Can burst to ~24%
           startupProbe:
             httpGet:
               path: /health/startup
@@ -504,7 +504,7 @@ spec:
     kind: Deployment
     name: frontend
   minReplicas: 2
-  maxReplicas: 8  # Reasonable max
+  maxReplicas: 6  # Adjusted for 3 small nodes
   metrics:
     - type: Resource
       resource:
@@ -543,7 +543,7 @@ spec:
     kind: Deployment
     name: backend
   minReplicas: 2
-  maxReplicas: 10  # Reasonable max
+  maxReplicas: 6  # Limited by cluster capacity
   metrics:
     - type: Resource
       resource:

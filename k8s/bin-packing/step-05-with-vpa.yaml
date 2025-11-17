@@ -69,14 +69,14 @@ spec:
           ports:
             - name: http
               containerPort: 8080
-          # Start with lower requests, VPA will adjust
+          # Start with lower estimates, VPA will adjust
           resources:
             requests:
-              cpu: "250m"      # VPA will tune this
-              memory: "384Mi"
+              cpu: "250m"      # ~13% of node
+              memory: "300Mi"  # ~10% of node
             limits:
-              cpu: "1500m"
-              memory: "1Gi"
+              cpu: "900m"      # Can burst to ~47%
+              memory: "900Mi"  # Can burst to ~31%
           startupProbe:
             httpGet:
               path: /health/startup

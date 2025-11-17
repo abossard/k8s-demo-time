@@ -1,0 +1,97 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  annotations:
+    karpenter.sh/nodepool-hash: "15891827758485695679"
+    karpenter.sh/nodepool-hash-version: v3
+    kubernetes.io/description: General purpose NodePool for generic workloads
+    meta.helm.sh/release-name: aks-managed-karpenter-overlay
+    meta.helm.sh/release-namespace: kube-system
+  creationTimestamp: "2025-09-26T21:39:17Z"
+  generation: 8
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    helm.toolkit.fluxcd.io/name: karpenter-overlay-main-adapter-helmrelease
+    helm.toolkit.fluxcd.io/namespace: 68d6fedb1cd08300014ce930
+  name: default
+  resourceVersion: "29758677"
+  uid: 2e2af121-7787-40f4-954e-5fbe72600680
+spec:
+  disruption:
+    budgets:
+    - nodes: 30%
+    consolidateAfter: 0s
+    consolidationPolicy: WhenEmptyOrUnderutilized
+  limits:
+    cpu: "8"
+    memory: 16Gi
+  template:
+    metadata:
+      labels:
+        kubernetes.azure.com/ebpf-dataplane: cilium
+    spec:
+      expireAfter: Never
+      nodeClassRef:
+        group: karpenter.azure.com
+        kind: AKSNodeClass
+        name: default
+      requirements:
+      - key: kubernetes.io/arch
+        operator: In
+        values:
+        - amd64
+      - key: kubernetes.io/os
+        operator: In
+        values:
+        - linux
+      - key: karpenter.sh/capacity-type
+        operator: In
+        values:
+        - spot
+        - on-demand
+      - key: karpenter.azure.com/sku-family
+        operator: In
+        values:
+        - A
+        - D
+        - B
+        - E
+      startupTaints:
+      - effect: NoExecute
+        key: node.cilium.io/agent-not-ready
+        value: "true"
+status:
+  conditions:
+  - lastTransitionTime: "2025-10-06T12:03:33Z"
+    message: ""
+    observedGeneration: 8
+    reason: NodeClassReady
+    status: "True"
+    type: NodeClassReady
+  - lastTransitionTime: "2025-10-28T15:33:49Z"
+    message: ""
+    observedGeneration: 8
+    reason: ValidationSucceeded
+    status: "True"
+    type: ValidationSucceeded
+  - lastTransitionTime: "2025-11-16T19:48:28Z"
+    message: ""
+    observedGeneration: 8
+    reason: NodeRegistrationHealthy
+    status: "True"
+    type: NodeRegistrationHealthy
+  - lastTransitionTime: "2025-11-16T19:33:48Z"
+    message: ""
+    observedGeneration: 8
+    reason: Ready
+    status: "True"
+    type: Ready
+  nodeClassObservedGeneration: 2
+  resources:
+    cpu: "8"
+    ephemeral-storage: 30298176Ki
+    hugepages-1Gi: "0"
+    hugepages-2Mi: "0"
+    memory: 16373724Ki
+    nodes: "1"
+    pods: "250"

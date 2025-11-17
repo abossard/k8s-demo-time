@@ -73,11 +73,11 @@ spec:
           # Scheduler uses requests for placement
           resources:
             requests:
-              cpu: "500m"      # Typical usage
-              memory: "512Mi"
+              cpu: "300m"      # ~16% of node - typical usage
+              memory: "400Mi"  # ~14% of node
             limits:
-              cpu: "1500m"     # Can burst to 1.5 CPU
-              memory: "1Gi"    # Can burst to 1GB
+              cpu: "900m"      # Can burst to ~47% of node
+              memory: "1000Mi" # Can burst to ~35%
           startupProbe:
             httpGet:
               path: /health/startup
@@ -110,7 +110,7 @@ metadata:
     tier: backend
     tutorial-step: "03-with-limits"
 spec:
-  replicas: 5  # Can pack more with lower requests
+  replicas: 5  # Pack more with lower requests
   selector:
     matchLabels:
       app: backend
@@ -161,13 +161,14 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          # Burstable: Aggressive packing
           resources:
             requests:
-              cpu: "300m"      # Lower baseline
-              memory: "384Mi"
+              cpu: "200m"      # ~10% of node
+              memory: "300Mi"  # ~10% of node
             limits:
-              cpu: "1000m"     # 3x burst capacity
-              memory: "768Mi"  # 2x burst capacity
+              cpu: "700m"      # Can burst to ~37%
+              memory: "700Mi"  # Can burst to ~24%
           startupProbe:
             httpGet:
               path: /health/startup
@@ -201,7 +202,7 @@ metadata:
     tier: worker
     tutorial-step: "03-with-limits"
 spec:
-  replicas: 3
+  replicas: 2  # Fewer workers on small cluster
   selector:
     matchLabels:
       app: worker

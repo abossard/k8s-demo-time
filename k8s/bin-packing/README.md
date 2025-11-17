@@ -144,11 +144,9 @@ kubectl apply -f k8s/bin-packing/step-03-with-limits.yaml
 
 **Demonstrate:**
 ```bash
-# Port-forward to service
-kubectl port-forward svc/frontend -n bin-packing-demo 8080:80
-
 # Trigger CPU burst
-curl -X POST http://localhost:8080/api/stress/cpu \
+kubectl run curl-test -n bin-packing-demo --rm -it --restart=Never --image=curlimages/curl:latest \
+  -- curl -X POST http://frontend/api/stress/cpu \
   -H "Content-Type: application/json" \
   -d '{"minutes": 2, "threads": 4}'
 
@@ -183,7 +181,8 @@ kubectl get hpa -n bin-packing-demo -w
 **Demonstrate:**
 ```bash
 # Generate sustained load
-curl -X POST http://localhost:8080/api/stress/cpu \
+kubectl run curl-test -n bin-packing-demo --rm -it --restart=Never --image=curlimages/curl:latest \
+  -- curl -X POST http://frontend/api/stress/cpu \
   -H "Content-Type: application/json" \
   -d '{"minutes": 10, "threads": 8, "broadcastToAll": true}'
 
@@ -249,9 +248,8 @@ kubectl apply -f k8s/bin-packing/step-06-mixed-qos.yaml
 **Demonstrate Resource Pressure:**
 ```bash
 # Generate memory pressure
-kubectl port-forward svc/frontend -n bin-packing-demo 8080:80
-
-curl -X POST http://localhost:8080/api/stress/memory \
+kubectl run curl-test -n bin-packing-demo --rm -it --restart=Never --image=curlimages/curl:latest \
+  -- curl -X POST http://frontend/api/stress/memory \
   -H "Content-Type: application/json" \
   -d '{"minutes": 5, "targetMegabytes": 2048, "broadcastToAll": true}'
 
@@ -387,7 +385,8 @@ kubectl get events -n bin-packing-demo --sort-by='.lastTimestamp' -w
 
 **Option B - Command line:**
 ```bash
-curl -X POST http://localhost:8080/api/stress/cpu \
+kubectl run curl-test -n bin-packing-demo --rm -it --restart=Never --image=curlimages/curl:latest \
+  -- curl -X POST http://frontend/api/stress/cpu \
   -H "Content-Type: application/json" \
   -d '{"minutes": 5, "threads": 4, "broadcastToAll": true}'
 ```
@@ -443,7 +442,8 @@ kubectl get pods -n bin-packing-demo --field-selector=status.phase=Failed
 
 **17. Check frontend service is still working:**
 ```bash
-curl http://localhost:8080/api/status
+kubectl run curl-test -n bin-packing-demo --rm -it --restart=Never --image=curlimages/curl:latest \
+  -- curl http://frontend/api/status
 ```
 **What to say:** "The frontend is still responding perfectly. From a user perspective, the service works great. But behind the scenes, we sacrificed batch jobs to make room."
 

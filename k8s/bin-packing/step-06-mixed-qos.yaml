@@ -75,14 +75,14 @@ spec:
           ports:
             - name: http
               containerPort: 8080
-          # Guaranteed: requests == limits
+          # Guaranteed: Critical service
           resources:
             requests:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "350m"      # ~18% of node
+              memory: "400Mi"  # ~14% of node
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "350m"
+              memory: "400Mi"
           startupProbe:
             httpGet:
               path: /health/startup
