@@ -578,6 +578,188 @@ kubectl describe nodes | grep -A 5 "Conditions:"
 
 ---
 
+## 🖥️ Live Monitoring Dashboard: CLI Commands for Continuous Investigation
+
+During the demo, keep these commands running in separate terminals to provide a constant view of cluster events and eviction decisions. This setup exposes the eviction decision process in real-time.
+
+### Recommended Terminal Layout (4 panes)
+
+```
+┌────────────────────────────────┬────────────────────────────────┐
+│  Terminal 1: Events Stream     │  Terminal 2: Pod Status        │
+│  (eviction/scheduling)         │  (watch running/pending)       │
+├────────────────────────────────┼────────────────────────────────┤
+│  Terminal 3: Node Pressure     │  Terminal 4: QoS Summary       │
+│  (memory/disk conditions)      │  (who gets evicted first)      │
+└────────────────────────────────┴────────────────────────────────┘
+```
+
+---
+
+### Terminal 1: Real-Time Events (Eviction Focus)
+
+Stream all cluster events with eviction and scheduling details:
+
+```bash
+# Watch all events in real-time (sorted by timestamp)
+kubectl events -n bin-packing-demo --watch
+
+# Alternative: Filter for warnings only (evictions appear as warnings)
+kubectl get events -n bin-packing-demo --field-selector type=Warning --watch
+
+# Show eviction-specific events with reason
+kubectl get events -n bin-packing-demo --field-selector reason=Evicted -w
+
+# Comprehensive event stream with all namespaces (useful for node-level events)
+kubectl events --all-namespaces --watch --types=Warning
+```
+
+**What to look for:**
+- `Evicted` reason: Pod was evicted due to node pressure
+- `FailedScheduling` reason: Scheduler couldn't find a node for the pod
+- `Killing` reason: Container is being terminated
+- `NodeNotReady`: Node is under pressure or unhealthy
+
+---
+
+### Terminal 2: Pod Status with QoS Visibility
+
+Show pods with their QoS class and priority (who gets evicted first):
+
+```bash
+# Watch pods with QoS class and status
+watch -n 2 'kubectl get pods -n bin-packing-demo \
+  -o custom-columns=\
+NAME:.metadata.name,\
+STATUS:.status.phase,\
+QOS:.status.qosClass,\
+PRIORITY:.spec.priorityClassName,\
+NODE:.spec.nodeName'
+
+# Simpler: Just watch pod status
+kubectl get pods -n bin-packing-demo -w
+
+# Count pods by status (useful metric)
+watch -n 2 'kubectl get pods -n bin-packing-demo --no-headers \
+  | awk "{print \$3}" | sort | uniq -c'
+```
+
+**What to look for:**
+- Pods transitioning from `Running` → `Evicted` → `Pending`
+- BestEffort pods should be evicted first
+- Guaranteed pods should remain Running
+
+---
+
+### Terminal 3: Node Pressure Conditions
+
+Monitor node conditions that trigger evictions:
+
+```bash
+# Watch node conditions (MemoryPressure, DiskPressure, PIDPressure)
+watch -n 5 'kubectl get nodes -o custom-columns=\
+NAME:.metadata.name,\
+CPU%:.status.allocatable.cpu,\
+MEM%:.status.allocatable.memory,\
+MEM_PRESSURE:.status.conditions[?(@.type==\"MemoryPressure\")].status,\
+DISK_PRESSURE:.status.conditions[?(@.type==\"DiskPressure\")].status'
+
+# Detailed node pressure check
+kubectl describe nodes | grep -A 10 "Conditions:"
+
+# Resource usage on nodes
+watch -n 3 'kubectl top nodes'
+```
+
+**What to look for:**
+- `MemoryPressure: True` triggers evictions
+- `DiskPressure: True` triggers evictions
+- High CPU% doesn't trigger evictions (just throttling)
+
+---
+
+### Terminal 4: Eviction Decision Summary
+
+Track the eviction order (BestEffort → Burstable → Guaranteed):
+
+```bash
+# Show current pod QoS distribution
+watch -n 3 'echo "=== QoS Distribution ===" && \
+kubectl get pods -n bin-packing-demo -o jsonpath="{range .items[*]}{.status.qosClass}{\"\\n\"}{end}" \
+  | sort | uniq -c && \
+echo "" && \
+echo "=== Evicted Pods ===" && \
+kubectl get pods -n bin-packing-demo --field-selector=status.phase=Failed --no-headers 2>/dev/null | wc -l'
+
+# See which pods were recently evicted with their QoS
+kubectl get pods -n bin-packing-demo --field-selector=status.phase=Failed \
+  -o custom-columns=NAME:.metadata.name,QOS:.status.qosClass,REASON:.status.reason
+```
+
+---
+
+### One-Liner Dashboard (Single Terminal)
+
+If you only have one terminal, use this combined view:
+
+```bash
+watch -n 3 '
+echo "=== NODE CONDITIONS ==="
+kubectl get nodes -o wide --no-headers | head -3
+echo ""
+echo "=== POD STATUS SUMMARY ==="
+kubectl get pods -n bin-packing-demo --no-headers | awk "{print \$3}" | sort | uniq -c
+echo ""
+echo "=== RECENT EVENTS (last 5) ==="
+kubectl get events -n bin-packing-demo --sort-by=".lastTimestamp" | tail -5
+echo ""
+echo "=== EVICTED PODS ==="
+kubectl get pods -n bin-packing-demo --field-selector=status.phase=Failed --no-headers 2>/dev/null | wc -l
+'
+```
+
+---
+
+### Understanding Eviction Decisions
+
+The kubelet evicts pods in this priority order when node memory pressure occurs:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    EVICTION PRIORITY ORDER                       │
+├─────────────────────────────────────────────────────────────────┤
+│  1. BestEffort pods (no requests/limits)         ← First out    │
+│  2. Burstable pods exceeding their requests      ← Second out   │
+│  3. Burstable pods within their requests         ← Third out    │
+│  4. Guaranteed pods (only if critical)           ← Last resort  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key differences:**
+- **Memory pressure** → Evictions (pods are killed and rescheduled)
+- **CPU pressure** → Throttling (pods stay Running but slow down)
+
+**CLI to verify eviction reason:**
+```bash
+# Describe an evicted pod to see the reason
+kubectl describe pod <evicted-pod-name> -n bin-packing-demo | grep -A 5 "Status:"
+
+# Check kubelet eviction thresholds on a node
+kubectl get node <node-name> -o yaml | grep -A 20 "eviction"
+```
+
+---
+
+### References
+
+- [Node-pressure Eviction (Official Docs)](https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/)
+- [Pod Priority and Preemption](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/)
+- [A Guide to Kubernetes Pod Eviction](https://opensource.com/article/21/12/kubernetes-pod-eviction)
+- [Every Pod Eviction in Kubernetes, Explained](https://ahmet.im/blog/kubernetes-evictions/)
+- [Surviving Kubernetes Pod Evictions](https://dev.to/nurudeen_kamilu/surviving-kubernetes-pod-evictions-managing-resources-priorities-and-stability-3jj1)
+
+---
+
 ## 📊 K9s Monitoring Guide (Xray/Pulse Style)
 
 [k9s](https://k9scli.io/) is a terminal-based UI for Kubernetes that provides real-time visualization of cluster resources. It's perfect for observing evictions and scheduler behavior during the bin packing demonstration.

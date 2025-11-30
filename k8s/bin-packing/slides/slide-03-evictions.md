@@ -4,23 +4,46 @@
 
 **Static visual prompt:**
 ```
-Memory pressure → Evict
-Node: [███▒▒.....] → [██████▒▒..]
-Pods: [BE][BE][BU][BU][G] → [  ][  ][BU][BU][G]
-
-CPU pressure → Throttle
-Node: CPU 90% (limits hit)
-Pods: [BU (⌛)][BU (⌛)][G (ok)] stay Running
+┌─────────────────────────────────────────────────────────────────┐
+│  MEMORY PRESSURE → EVICTION                                     │
+│  Node: [███▒▒.....] → [██████▒▒..]                             │
+│  Pods: [BE][BE][BU][BU][G] → [  ][  ][BU][BU][G]               │
+│        ↓↓ evicted ↓↓          (still running)                   │
+│  Result: BestEffort pods → Pending/Evicted queue                │
+├─────────────────────────────────────────────────────────────────┤
+│  CPU PRESSURE → THROTTLING                                      │
+│  Node: CPU 90% (limits hit)                                     │
+│  Pods: [BU (⌛)][BU (⌛)][G (ok)] stay Running                  │
+│  Result: Slower response, no evictions                          │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 **Narration beats:**
-- Describe pressure signals, and contrast memory eviction vs. CPU throttling.【F:k8s/bin-packing/README.md†L236-L264】
-- Step 6 memory stress triggers BestEffort evictions first.【F:k8s/bin-packing/README.md†L234-L268】
-- CPU stress keeps pods Running but throttled; watch latency instead of evictions.【F:k8s/bin-packing/README.md†L236-L264】
-- Step 7 manual scale causes low-priority pods to evict to make room for growth.【F:k8s/bin-packing/README.md†L271-L284】【F:k8s/bin-packing/README.md†L407-L448】
+1. **Memory vs. CPU behavior:** "Memory pressure triggers eviction; CPU pressure only throttles. This is why we focus on memory in this demo."
+2. **Eviction order:** "Kubelet evicts BestEffort first, then Burstable exceeding requests, then Burstable within requests, and Guaranteed only as a last resort."
+3. **Step 6 demo:** "Memory stress on mixed QoS pods shows BestEffort evictions first."【F:k8s/bin-packing/README.md†L234-L268】
+4. **Step 7 demo:** "Manual scaling creates pressure; low-priority pods are evicted to make room."【F:k8s/bin-packing/README.md†L271-L284】【F:k8s/bin-packing/README.md†L407-L448】
+5. **Live monitoring:** "Use the CLI monitoring commands to see eviction decisions in real-time."
+
+**Live monitoring commands to show during this slide:**
+```bash
+# Watch eviction events in real-time
+kubectl events -n bin-packing-demo --watch --types=Warning
+
+# Show pods with QoS class and priority
+kubectl get pods -n bin-packing-demo \
+  -o custom-columns=NAME:.metadata.name,QOS:.status.qosClass,STATUS:.status.phase
+
+# Check node pressure conditions
+kubectl describe nodes | grep -A 5 "Conditions:"
+```
 
 **Animation cue:** see `../animations/slide-03-evictions.md`.
+
+**See also:** [Live Monitoring Dashboard](../README.md#-live-monitoring-dashboard-cli-commands-for-continuous-investigation) for full CLI setup.
 
 **References:**
 - Eviction Policy: https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/
 - Pod Priority & Preemption: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+- A Guide to Kubernetes Pod Eviction: https://opensource.com/article/21/12/kubernetes-pod-eviction
+- Every Pod Eviction Explained: https://ahmet.im/blog/kubernetes-evictions/
