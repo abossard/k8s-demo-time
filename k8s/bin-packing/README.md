@@ -628,20 +628,13 @@ Show pods with their QoS class and priority (who gets evicted first):
 
 ```bash
 # Watch pods with QoS class and status
-watch -n 2 'kubectl get pods -n bin-packing-demo \
-  -o custom-columns=\
-NAME:.metadata.name,\
-STATUS:.status.phase,\
-QOS:.status.qosClass,\
-PRIORITY:.spec.priorityClassName,\
-NODE:.spec.nodeName'
+watch -n 2 'kubectl get pods -n bin-packing-demo -o custom-columns=NAME:.metadata.name,STATUS:.status.phase,QOS:.status.qosClass,PRIORITY:.spec.priorityClassName,NODE:.spec.nodeName'
 
 # Simpler: Just watch pod status
 kubectl get pods -n bin-packing-demo -w
 
 # Count pods by status (useful metric)
-watch -n 2 'kubectl get pods -n bin-packing-demo --no-headers \
-  | awk "{print \$3}" | sort | uniq -c'
+watch -n 2 "kubectl get pods -n bin-packing-demo --no-headers | awk '{print \$3}' | sort | uniq -c"
 ```
 
 **What to look for:**
@@ -708,7 +701,7 @@ echo "=== NODE CONDITIONS ==="
 kubectl get nodes -o wide --no-headers | head -3
 echo ""
 echo "=== POD STATUS SUMMARY ==="
-kubectl get pods -n bin-packing-demo --no-headers | awk "{print \$3}" | sort | uniq -c
+kubectl get pods -n bin-packing-demo --no-headers | awk '"'"'{print $3}'"'"' | sort | uniq -c
 echo ""
 echo "=== RECENT EVENTS (last 5) ==="
 kubectl get events -n bin-packing-demo --sort-by=".lastTimestamp" | tail -5

@@ -2,6 +2,10 @@
 
 **Core message:** Under memory pressure, kubelet evicts BestEffort → Burstable → (rare) Guaranteed. Under CPU pressure, pods throttle instead of evicting.
 
+**Why memory and CPU behave differently:**
+- **Memory is incompressible**: Once allocated, memory cannot be "shared" or reclaimed without killing the process. If a node runs out of memory, something must die.
+- **CPU is compressible**: CPU cycles can be throttled—pods simply run slower but stay alive. The kernel can share CPU time across processes.
+
 **Static visual prompt:**
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -19,7 +23,7 @@
 ```
 
 **Narration beats:**
-1. **Memory vs. CPU behavior:** "Memory pressure triggers eviction; CPU pressure only throttles. This is why we focus on memory in this demo."
+1. **Memory vs. CPU behavior:** "Memory pressure triggers eviction; CPU pressure only throttles. Memory is incompressible—once allocated, it can't be shared. CPU is compressible—we can just slow things down."
 2. **Eviction order:** "Kubelet evicts BestEffort first, then Burstable exceeding requests, then Burstable within requests, and Guaranteed only as a last resort."
 3. **Step 6 demo:** "Memory stress on mixed QoS pods shows BestEffort evictions first."【F:k8s/bin-packing/README.md†L234-L268】
 4. **Step 7 demo:** "Manual scaling creates pressure; low-priority pods are evicted to make room."【F:k8s/bin-packing/README.md†L271-L284】【F:k8s/bin-packing/README.md†L407-L448】
