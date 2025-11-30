@@ -5,9 +5,9 @@ metadata:
   labels:
     tutorial.k8s-demo/component: bin-packing
 ---
-# Step 4: Add HPA (Horizontal Pod Autoscaler)
-# Scale out during load, scale in during idle periods
-# Reduces baseline replica count and lets HPA manage demand
+# Step 4: Manual scale-up/down (simulate what a scaler would do)
+# Keep replicas lean by default and bump them explicitly during load.
+# Use `kubectl scale deployment/<name> --replicas=<N>` to show the effect live.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,7 +18,7 @@ metadata:
     tier: frontend
     tutorial-step: "04-with-hpa"
 spec:
-  replicas: 2  # Lower baseline, HPA will scale up
+  replicas: 2  # Lower baseline; demo will bump replicas manually
   selector:
     matchLabels:
       app: frontend
@@ -277,124 +277,6 @@ spec:
             periodSeconds: 10
             failureThreshold: 3
             timeoutSeconds: 2
----
-# HPA for frontend - scale on CPU and memory
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: frontend-hpa
-  namespace: bin-packing-demo
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: frontend
-  minReplicas: 2
-  maxReplicas: 8
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 60  # Scale when CPU > 60%
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 70  # Scale when memory > 70%
-  behavior:
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-        - type: Percent
-          value: 50
-          periodSeconds: 60
-        - type: Pods
-          value: 2
-          periodSeconds: 60
-      selectPolicy: Max
-    scaleDown:
-      stabilizationWindowSeconds: 300  # Wait 5 min before scaling down
-      policies:
-        - type: Percent
-          value: 25
-          periodSeconds: 60
----
-# HPA for backend
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: backend-hpa
-  namespace: bin-packing-demo
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: backend
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 65
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 75
-  behavior:
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-        - type: Percent
-          value: 100  # Double capacity quickly
-          periodSeconds: 60
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies:
-        - type: Percent
-          value: 25
-          periodSeconds: 60
----
-# HPA for worker - more aggressive scaling
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: worker-hpa
-  namespace: bin-packing-demo
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: worker
-  minReplicas: 1
-  maxReplicas: 6
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-  behavior:
-    scaleUp:
-      stabilizationWindowSeconds: 30
-      policies:
-        - type: Percent
-          value: 200  # Scale aggressively
-          periodSeconds: 30
-    scaleDown:
-      stabilizationWindowSeconds: 180
-      policies:
-        - type: Pods
-          value: 1
-          periodSeconds: 60
 ---
 # Services
 apiVersion: v1

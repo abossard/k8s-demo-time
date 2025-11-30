@@ -28,7 +28,7 @@ This tutorial takes you through **7 iterations**, each making your deployment mo
 flowchart LR
     A["Step 1:<br/>Static VM-like<br/>💰💰💰💰<br/>🟢🟢🟢🟢"] --> B["Step 2:<br/>QoS Aware<br/>💰💰💰<br/>🟢🟢🟢"]
     B --> C["Step 3:<br/>With Limits<br/>💰💰💰<br/>🟢🟢🟢"]
-    C --> D["Step 4:<br/>Add HPA<br/>💰💰<br/>🟢🟢"]
+    C --> D["Step 4:<br/>Manual scale-out<br/>💰💰<br/>🟢🟢"]
     D --> E["Step 5:<br/>Add VPA<br/>💰💰<br/>🟢🟢"]
     E --> F["Step 6:<br/>Mixed QoS<br/>💰<br/>🟡"]
     F --> G["Step 7:<br/>Extreme<br/>💰<br/>🔴"]
@@ -68,7 +68,7 @@ flowchart TD
     A["🎯 Goal: Reduce Infrastructure Costs"] --> B["Step 1: Static Baseline<br/>Conservative, predictable"]
     B --> C["Step 2: Introduce QoS<br/>Differentiate criticality"]
     C --> D["Step 3: Add Resource Limits<br/>Allow controlled bursting"]
-    D --> E["Step 4: Enable HPA<br/>Scale horizontally on demand"]
+    D --> E["Step 4: Manual Scaling (simulate autoscaler)\nSimple, explicit"]
     E --> F["Step 5: Enable VPA<br/>Right-size automatically"]
     F --> G["Step 6: Mixed QoS Strategy<br/>Balance cost vs. priority"]
     G --> H["Step 7: Extreme Bin Packing<br/>Push to the limits"]
@@ -162,39 +162,36 @@ kubectl top pods -n bin-packing-demo -w
 
 ---
 
-### Step 4: Introduce HPA (Horizontal Pod Autoscaler) (45 min)
+### Step 4: Manual Scale-Out (simulate an autoscaler) (30 min)
 
-**Concept:** Scale out during load, scale in during idle periods.
+**Concept:** Keep the workload lean by default and deliberately scale replicas up/down with `kubectl scale` to show what an autoscaler would do—without waiting for HPA polling and cooldowns.
 
 **Changes from Step 3:**
-- Add HPA for CPU and memory
-- Start with fewer replicas
-- Let HPA adjust based on actual demand
+- Lower the default replica counts
+- Use `kubectl scale deployment/<name> --replicas=<N>` during the demo to add/remove pods instantly
+- Emphasize that a production scaler would automate these replica bumps
 
 ```bash
 kubectl apply -f k8s/bin-packing/step-04-with-hpa.yaml
 
-# Watch HPA in action
-kubectl get hpa -n bin-packing-demo -w
+# Simulate the scaler adding capacity quickly
+kubectl scale deployment/frontend -n bin-packing-demo --replicas=4
+kubectl scale deployment/backend -n bin-packing-demo --replicas=3
+
+# Scale back down to show bin packing tension
+kubectl scale deployment/frontend -n bin-packing-demo --replicas=2
+kubectl scale deployment/backend -n bin-packing-demo --replicas=2
 ```
 
-**Demonstrate:**
-```bash
-# Generate sustained load
-kubectl run curl-test -n bin-packing-demo --rm -it --restart=Never --image=curlimages/curl:latest \
-  -- curl -X POST http://frontend/api/stress/cpu \
-  -H "Content-Type: application/json" \
-  -d '{"minutes": 10, "threads": 8, "broadcastToAll": true}'
-
-# Watch scaling
-watch 'kubectl get hpa,pods -n bin-packing-demo'
-```
+**Observe:**
+- Pods start/stop immediately, making the bin-packing effect easy to see
+- `kubectl get pods -n bin-packing-demo -w` shows placement and Pending/Evicted states as nodes fill
 
 **Key Metrics:**
-- Pods per node: Variable (2-6)
+- Pods per node: Variable (2-6) depending on your manual scale
 - Node utilization: ~55-70% (dynamic)
 - Cost: 45% reduction (during off-peak)
-- Stability: Good (scales to meet demand)
+- Stability: Good (you control the headroom)
 
 ---
 
@@ -253,12 +250,23 @@ kubectl run curl-test -n bin-packing-demo --rm -it --restart=Never --image=curli
   -H "Content-Type: application/json" \
   -d '{"minutes": 5, "targetMegabytes": 2048, "broadcastToAll": true}'
 
+# Generate CPU pressure (shows throttling, not eviction)
+kubectl run curl-test -n bin-packing-demo --rm -it --restart=Never --image=curlimages/curl:latest \
+  -- curl -X POST http://frontend/api/stress/cpu \
+  -H "Content-Type: application/json" \
+  -d '{"minutes": 5, "threads": 4, "broadcastToAll": true}'
+
 # Watch evictions
 kubectl get events -n bin-packing-demo --field-selector reason=Evicted -w
 
 # Check which pods got evicted (should be BestEffort first)
 kubectl get pods -n bin-packing-demo --field-selector status.phase=Failed
 ```
+
+**What Kubernetes does under pressure:**
+- **Memory pressure:** Kubelet evicts BestEffort first, then Burstable; Guaranteed last. Evicted pods restart and may reschedule on other nodes. [Docs: node pressure eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/)
+- **CPU pressure:** Pods are throttled when they hit limits; they are not evicted. Latency rises but pods stay Running. [Docs: CPU management](https://kubernetes.io/docs/tasks/administer-cluster/cpu-management-policies/)
+- **Priority/preemption:** Higher-priority pods can preempt lower-priority ones if resources are scarce. [Docs](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/)
 
 **Key Metrics:**
 - Pods per node: 6-10
@@ -276,11 +284,17 @@ kubectl get pods -n bin-packing-demo --field-selector status.phase=Failed
 - Core services (frontend) remain stable with Guaranteed QoS
 - Supporting services (backend) use minimal requests but can burst
 - Many low-priority BestEffort pods (workers, cache, analytics) fill available space
-- Aggressive HPA settings for frontend to trigger scaling
+- Manual scale bumps (simulating an external scaler) grow frontend replicas fast when traffic rises
 - When frontend scales under load, low-priority pods are evicted to make room
 
 ```bash
 kubectl apply -f k8s/bin-packing/step-07-extreme-packing.yaml
+```
+
+**Scale to create pressure (simulating a fast scaler):**
+```bash
+kubectl scale deployment/frontend -n bin-packing-demo --replicas=4
+kubectl scale deployment/backend -n bin-packing-demo --replicas=4
 ```
 
 ---
@@ -391,28 +405,21 @@ kubectl run curl-test -n bin-packing-demo --rm -it --restart=Never --image=curli
   -d '{"minutes": 5, "threads": 4, "broadcastToAll": true}'
 ```
 
-**What to say:** "I'm starting CPU stress on all frontend pods. This will drive up CPU utilization and trigger the HPA to scale out."
+**What to say:** "I'm starting CPU stress on all frontend pods. This drives up CPU utilization; in production an external scaler or HPA would react. We'll simulate that manually so it happens instantly."
 
 ---
 
 ### Observation Phase (15 minutes)
 
-**11. Watch HPA trigger (30-60 seconds after load starts):**
-**What to look for in terminal 3:**
+**11. Manually bump replicas to mimic a fast scaler:**
+**What to run in terminal 3:**
+```bash
+kubectl scale deployment/frontend -n bin-packing-demo --replicas=4
+kubectl scale deployment/backend -n bin-packing-demo --replicas=4
 ```
-NAME           REFERENCE           TARGETS         MINPODS   MAXPODS   REPLICAS
-frontend-hpa   Deployment/frontend  85%/70%        2         8         2
-```
-**What to say:** "Notice the CPU target is now above threshold (85% vs 70% target). The HPA will scale up."
+**What to say:** "Pretend our scaler decided to add capacity. With `kubectl scale` we see the bin-packing effect immediately."
 
-**12. Watch HPA scale decision (~1 minute):**
-**What to look for in terminal 3:**
-```
-frontend-hpa   Deployment/frontend  88%/70%        2         8         4
-```
-**What to say:** "The HPA has decided to scale from 2 to 4 replicas to handle the load."
-
-**13. Watch for evictions in terminal 4:**
+**12. Watch new pods schedule and pressure events:**
 **What to look for in events terminal:**
 ```
 2m ago   Normal    Evicted   Pod   Evicting pod due to node memory pressure
@@ -420,7 +427,7 @@ frontend-hpa   Deployment/frontend  88%/70%        2         8         4
 ```
 **What to say:** "HERE IT IS! The scheduler needs space for new frontend pods. BestEffort pods are being evicted to make room. This is expected - the low-priority workers are being kicked out so the critical frontend can scale."
 
-**14. Check which pods were evicted in terminal 2:**
+**13. Check which pods were evicted in terminal 2:**
 **What to look for:**
 - Some worker/cache/analytics pods show `Evicted` or `Pending` status
 - Frontend pods show `Running` with new pods being created
@@ -428,19 +435,19 @@ frontend-hpa   Deployment/frontend  88%/70%        2         8         4
 
 **What to say:** "See how the frontend scaled successfully to handle load, but several worker and cache pods were evicted. The CORE SERVICE WORKS and scaled, but it kicked out the less important batch jobs."
 
-**15. Check node utilization:**
+**14. Check node utilization:**
 ```bash
 kubectl top nodes
 ```
 **What to say:** "Node utilization is now higher (75-85%) because frontend pods are using their allocated resources, and low-priority pods were evicted."
 
-**16. View evicted pods:**
+**15. View evicted pods:**
 ```bash
 kubectl get pods -n bin-packing-demo --field-selector=status.phase=Failed
 ```
 **What to say:** "These are the pods that were evicted. Notice they're all BestEffort (worker, cache, analytics) - never the critical frontend."
 
-**17. Check frontend service is still working:**
+**16. Check frontend service is still working:**
 ```bash
 kubectl run curl-test -n bin-packing-demo --rm -it --restart=Never --image=curlimages/curl:latest \
   -- curl http://frontend/api/status
@@ -462,17 +469,16 @@ NODE:.spec.nodeName | grep -E "NAME|Running|Evicted"
 
 **What to say:** "Let's analyze what happened. All Guaranteed frontend pods are running. Backend Burstable pods are still running. But several BestEffort pods were evicted."
 
-**19. Check HPA after load subsides (wait 5+ minutes):**
+**17. Scale back down to steady state (optional):**
 ```bash
-kubectl get hpa frontend-hpa -n bin-packing-demo
+kubectl scale deployment/frontend -n bin-packing-demo --replicas=2
+kubectl scale deployment/backend -n bin-packing-demo --replicas=3
 ```
-**What to look for:** CPU should drop back below 70%, replica count should start to decrease
+**What to say:** "After the spike, we can dial replicas back down. Those evicted BestEffort pods only come back if there's room—another reason to monitor Pending/Evicted counts."
 
-**What to say:** "Now that the load is subsiding, the HPA will scale back down. But those evicted BestEffort pods? They're waiting in Pending state until there's room again, or they're just gone."
-
-**20. View the full picture:**
+**18. View the full picture:**
 ```bash
-kubectl get all,hpa,vpa -n bin-packing-demo
+kubectl get all,vpa -n bin-packing-demo
 ```
 
 ---
@@ -531,9 +537,9 @@ kubectl get events -n bin-packing-demo --field-selector reason=Evicted
 watch 'kubectl get pods -n bin-packing-demo -l qos-class=besteffort'
 ```
 
-**Check HPA history:**
+**Check recent scale events:**
 ```bash
-kubectl describe hpa frontend-hpa -n bin-packing-demo | grep -A 10 Events
+kubectl describe deployment frontend -n bin-packing-demo | grep -A 10 Events
 ```
 
 **Check node pressure:**
