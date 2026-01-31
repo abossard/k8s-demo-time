@@ -49,6 +49,31 @@ kubectl get nodepool biometric-explore
 kubectl get nodepool biometric-stable
 ```
 
+### VPA Resource Optimization
+
+```bash
+# Deploy VPA in "Off" mode (explore phase only)
+kubectl apply -f k8s/overlays/explore/vpa.yaml
+
+# Check VPA status
+kubectl get vpa -n biometric-shards
+kubectl describe vpa biometric-shard-vpa -n biometric-shards
+
+# Get VPA recommendations
+./scripts/check-vpa-recommendations.sh
+
+# View recommendations directly (advanced)
+kubectl get vpa biometric-shard-vpa -n biometric-shards -o jsonpath='{.status.recommendation}'
+
+# Goldilocks dashboard (optional)
+helm install goldilocks fairwinds-stable/goldilocks -n goldilocks --create-namespace
+kubectl label namespace biometric-shards goldilocks.fairwinds.com/enabled=true
+kubectl port-forward -n goldilocks svc/goldilocks-dashboard 8080:80
+
+# Remove VPA (before stable phase transition)
+kubectl delete vpa biometric-shard-vpa -n biometric-shards
+```
+
 ### Monitoring
 
 ```bash

@@ -295,6 +295,107 @@ gantt
     Cleanup explore NodePool     :03:00, 10m
 ```
 
+## VPA Resource Optimization
+
+### Why VPA for VM-like Workloads?
+
+While this workload uses **fixed resources** (Guaranteed QoS) and **manual updates** (OnDelete), VPA in "Off" mode is valuable during the explore phase:
+
+**Benefits:**
+- Discovers optimal resource values based on **actual usage**
+- Complements node packing analysis
+- Helps right-size resources before stable phase
+- No conflict with VM-like behavior (recommendations only)
+
+**Why NOT VPA Auto mode:**
+- ❌ Conflicts with Guaranteed QoS (requests == limits)
+- ❌ Breaks manual update control (OnDelete)
+- ❌ Causes pod restarts (not VM-like)
+- ❌ Incompatible with PDB minAvailable=10
+
+### VPA Workflow
+
+```
+1. Deploy VPA in "Off" mode (explore phase)
+   ↓
+2. Wait 5-10 minutes for metric collection
+   ↓
+3. Optional: Generate load for realistic data
+   ↓
+4. Check recommendations with script
+   ↓
+5. Analyze: Lower Bound | Target | Upper Bound
+   ↓
+6. Apply recommendations to stable phase manually
+   ↓
+7. Keep requests == limits (Guaranteed QoS)
+```
+
+### Example VPA Recommendations
+
+**Initial Configuration:**
+- CPU: 4 cores (4000m)
+- Memory: 32Gi
+
+**VPA Analysis After 1 Hour:**
+```
+Resource    Lower Bound    Target         Upper Bound    Uncapped
+=======================================================================
+CPU         2800m          3500m          4200m          3600m
+Memory      26.5Gi         28.0Gi         30.5Gi         28.2Gi
+```
+
+**Interpretation:**
+- Actual usage is **below** initial 32Gi memory request
+- Can reduce to **28Gi** (Target) for cost savings
+- Lower Bound (26.5Gi) is aggressive, Target (28Gi) is safer
+
+**Impact on Node Packing:**
+
+**Before (32Gi per shard):**
+- Standard_E8s_v5 (64Gi): Fits 2 shards, ~2Gi headroom
+- Requires 5 nodes for 10 shards
+
+**After (28Gi per shard):**
+- Standard_E8s_v5 (64Gi): Still fits 2 shards, ~8Gi headroom
+- Still requires 5 nodes, but more headroom for system processes
+- Alternative: Could try Standard_D8s_v5 (32Gi allocatable) - barely fits 1 shard
+
+**Cost Savings:**
+- Reduced memory per shard: 32Gi → 28Gi (12.5% reduction)
+- Node count unchanged, but more headroom
+- Potential to switch to D-series (cheaper) if 2 shards fit
+
+### Using Goldilocks Dashboard
+
+Goldilocks provides a visual interface for VPA recommendations across all workloads:
+
+**Install:**
+```bash
+helm repo add fairwinds-stable https://charts.fairwinds.com/stable
+helm install goldilocks fairwinds-stable/goldilocks -n goldilocks --create-namespace
+kubectl label namespace biometric-shards goldilocks.fairwinds.com/enabled=true
+```
+
+**Access:**
+```bash
+kubectl port-forward -n goldilocks svc/goldilocks-dashboard 8080:80
+# Open http://localhost:8080
+```
+
+**Dashboard Shows:**
+- All containers in labeled namespaces
+- VPA recommendations (Lower/Target/Upper) in table format
+- Color-coded indicators for over/under-provisioned resources
+- Direct links to VPA objects
+
+**Workflow:**
+1. Review biometric-shard container in dashboard
+2. Compare current vs. recommended values
+3. Copy Target recommendations
+4. Apply to stable phase manifests
+5. Verify new packing with packing-summary.sh
+
 ## Key Takeaways
 
 ### Explore Phase

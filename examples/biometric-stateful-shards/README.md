@@ -262,6 +262,88 @@ aks-node-viewer --node-selector nodepool=biometric-explore
 - How many shards fit per node?
 - What is the monthly cost estimate?
 
+### Step 6a: Optional - VPA Resource Optimization
+
+**What is VPA?** Vertical Pod Autoscaler (VPA) analyzes actual resource usage and provides recommendations for right-sizing CPU and memory requests.
+
+**Why use VPA for this workload?** While we use fixed resources (Guaranteed QoS), VPA in "Off" mode can help discover the *optimal* resource values during the explore phase.
+
+**Deploy VPA (optional but recommended):**
+
+```bash
+# Apply VPA in "Off" mode (recommendations only, no auto-updates)
+kubectl apply -f k8s/overlays/explore/vpa.yaml
+
+# Wait 5-10 minutes for VPA to collect metrics
+# Generate some load to ensure realistic usage data
+kubectl port-forward -n biometric-shards svc/biometric-shard 8080:80
+
+# In another terminal, trigger some stress (optional)
+curl -X POST http://localhost:8080/api/stress/cpu \
+  -H "Content-Type: application/json" \
+  -d '{"minutes": 3, "threads": 4, "broadcastToAll": true}'
+
+# Check VPA recommendations
+./scripts/check-vpa-recommendations.sh
+```
+
+**What the VPA script shows:**
+- **Lower Bound**: Minimum safe resources
+- **Target**: Recommended "just right" value ⭐
+- **Upper Bound**: Conservative maximum
+- Comparison with current configuration
+- Suggestions for stable phase
+
+**Using VPA with Goldilocks (optional):**
+
+[Goldilocks](https://github.com/FairwindsOps/goldilocks) is a dashboard tool that visualizes VPA recommendations for all workloads in a namespace.
+
+```bash
+# Install Goldilocks (Helm)
+helm repo add fairwinds-stable https://charts.fairwinds.com/stable
+helm install goldilocks fairwinds-stable/goldilocks --namespace goldilocks --create-namespace
+
+# Enable Goldilocks for biometric-shards namespace
+kubectl label namespace biometric-shards goldilocks.fairwinds.com/enabled=true
+
+# Access the dashboard
+kubectl port-forward -n goldilocks svc/goldilocks-dashboard 8080:80
+
+# Open http://localhost:8080 to see VPA recommendations in a visual dashboard
+```
+
+**Important Notes:**
+- ⚠️ **Do NOT use VPA Auto mode** for this workload
+- This is a VM-like workload with manual updates (OnDelete)
+- VPA Auto mode would conflict with Guaranteed QoS and controlled updates
+- Use VPA recommendations to manually adjust resources in stable phase
+- Always keep `requests == limits` for Guaranteed QoS
+
+**Example: Applying VPA recommendations to stable phase:**
+
+If VPA recommends:
+- CPU Target: 3500m (3.5 cores)
+- Memory Target: 28Gi
+
+Update `k8s/overlays/stable/statefulset-patch.yaml`:
+
+```yaml
+spec:
+  template:
+    spec:
+      containers:
+        - name: biometric-shard
+          resources:
+            requests:
+              cpu: "3500m"      # From VPA target
+              memory: "28Gi"    # From VPA target
+            limits:
+              cpu: "3500m"      # Same for Guaranteed QoS
+              memory: "28Gi"    # Same for Guaranteed QoS
+```
+
+Then recalculate node requirements and update the stable NodePool accordingly.
+
 ### Step 7: Decide on Stable SKU
 
 Based on your observations, decide on the optimal SKU for the stable phase. Consider:

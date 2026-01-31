@@ -65,6 +65,18 @@ echo "Applying explore StatefulSet patch..."
 kubectl apply -f "$K8S_EXPLORE_DIR/statefulset-patch.yaml"
 
 echo ""
+read -p "Deploy VPA for resource optimization? (y/N) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Applying VPA in Off mode..."
+    kubectl apply -f "$K8S_EXPLORE_DIR/vpa.yaml"
+    echo ""
+    echo "✅ VPA deployed. Run ./scripts/check-vpa-recommendations.sh after 5-10 minutes."
+else
+    echo "⏭️  Skipping VPA deployment."
+fi
+
+echo ""
 echo "======================================"
 echo "Deployment Initiated!"
 echo "======================================"
@@ -98,13 +110,16 @@ echo ""
 echo "2. Analyze node packing:"
 echo "   ./scripts/packing-summary.sh"
 echo ""
-echo "3. Test routing:"
+echo "3. (Optional) Check VPA recommendations after 5-10 minutes:"
+echo "   ./scripts/check-vpa-recommendations.sh"
+echo ""
+echo "4. Test routing:"
 echo "   ./scripts/test-routing.sh"
 echo ""
-echo "4. Observe costs:"
+echo "5. Observe costs:"
 echo "   ./scripts/observe-costs.sh"
 echo ""
-echo "5. Access the dashboard:"
+echo "6. Access the dashboard:"
 echo "   kubectl port-forward -n biometric-shards svc/biometric-shard 8080:80"
 echo "   Open http://localhost:8080"
 echo ""
