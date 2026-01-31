@@ -1,0 +1,95 @@
+---
+# Karpenter NodePool for stable production phase
+# This NodePool provisions nodes based on lessons learned from exploration
+# Configure with the optimal SKU discovered during exploration
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: biometric-stable
+  annotations:
+    kubernetes.io/description: "Stable NodePool for biometric shards - pinned SKU, minimal disruption"
+spec:
+  # Disruption settings: Extremely conservative for stable production
+  disruption:
+    consolidationPolicy: WhenEmpty  # Only consolidate completely empty nodes
+    consolidateAfter: Never         # Never consolidate - keep nodes stable
+    budgets:
+      - nodes: "0"  # Zero disruption allowed
+  
+  # Hard limits to ensure exactly the right number of nodes based on exploration
+  # Example: If exploration showed 2 shards per E8s_v5, we need 5 nodes minimum
+  # Adjust these values after exploration phase
+  limits:
+    cpu: "80"      # 5 nodes * 16 vCPUs (adjust based on chosen SKU)
+    memory: 320Gi  # 5 nodes * 64Gi (adjust based on chosen SKU)
+  
+  template:
+    metadata:
+      labels:
+        kubernetes.azure.com/ebpf-dataplane: cilium
+        workload-type: biometric-shards
+        nodepool: biometric-stable
+        phase: production
+    
+    spec:
+      # Nodes are permanent - do not expire
+      expireAfter: Never
+      
+      # Reference to AKSNodeClass
+      nodeClassRef:
+        group: karpenter.azure.com
+        kind: AKSNodeClass
+        name: default
+      
+      # Taint nodes so only biometric workload can schedule here
+      taints:
+        - key: biometric
+          value: reserved
+          effect: NoSchedule
+      
+      # Requirements to pin to specific SKU discovered during exploration
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values:
+            - amd64
+        
+        - key: kubernetes.io/os
+          operator: In
+          values:
+            - linux
+        
+        # On-demand for production stability
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values:
+            - on-demand
+        
+        # Pin to specific SKU family discovered during exploration
+        # Example: E-series for memory-optimized workload
+        # Update these after exploration phase to pin exact SKU
+        - key: karpenter.azure.com/sku-family
+          operator: In
+          values:
+            - E  # Memory-optimized E-series (e.g., E8s_v5, E16s_v5)
+        
+        # Pin to exact memory size (example: 64Gi for E8s_v5)
+        # Adjust this based on exploration results
+        - key: karpenter.azure.com/sku-memory
+          operator: In
+          values:
+            - "65536"  # 64Gi in MiB (for Standard_E8s_v5)
+            # - "131072"  # 128Gi in MiB (for Standard_E16s_v5)
+        
+        # Pin to exact CPU count
+        - key: karpenter.azure.com/sku-cpu
+          operator: In
+          values:
+            - "8"   # For Standard_E8s_v5
+            # - "16"  # For Standard_E16s_v5
+      
+      # Cilium startup taint
+      startupTaints:
+        - effect: NoExecute
+          key: node.cilium.io/agent-not-ready
+          value: "true"

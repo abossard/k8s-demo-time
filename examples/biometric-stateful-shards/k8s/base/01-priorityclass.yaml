@@ -1,0 +1,11 @@
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: biometric-critical
+  labels:
+    app.kubernetes.io/name: biometric-shards
+description: "Critical priority for biometric shard workload. System is unavailable if any shard is down."
+value: 1000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority

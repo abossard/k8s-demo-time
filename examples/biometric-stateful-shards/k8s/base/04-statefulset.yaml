@@ -1,0 +1,222 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: biometric-shard
+  namespace: biometric-shards
+  labels:
+    app.kubernetes.io/name: biometric-shards
+    app.kubernetes.io/component: stateful-storage
+    app.kubernetes.io/version: "1.0"
+spec:
+  serviceName: biometric-shard-headless
+  replicas: 10
+  # VM-like behavior: Manual updates only - no automatic rollout
+  updateStrategy:
+    type: OnDelete
+  # Ordered, sequential pod creation for stable peer discovery
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: biometric-shards
+      app.kubernetes.io/component: shard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: biometric-shards
+        app.kubernetes.io/component: shard
+        app.kubernetes.io/version: "1.0"
+      annotations:
+        # Karpenter: Do not disrupt this workload during consolidation
+        karpenter.sh/do-not-disrupt: "true"
+        # Cluster Autoscaler: Safe-to-evict annotation (legacy, but doesn't hurt)
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+    spec:
+      priorityClassName: biometric-critical
+      
+      # VM-like behavior: Long grace period for clean shutdown
+      terminationGracePeriodSeconds: 120
+      
+      # VM-like behavior: Reduce rescheduling churn - tolerate node issues longer
+      tolerations:
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300  # 5 minutes before rescheduling
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300  # 5 minutes before rescheduling
+      
+      # Spread across nodes and zones for better availability (but allow co-location)
+      topologySpreadConstraints:
+        - maxSkew: 2
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway  # Prefer spread but don't block scheduling
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: biometric-shards
+              app.kubernetes.io/component: shard
+        - maxSkew: 3
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: biometric-shards
+              app.kubernetes.io/component: shard
+      
+      containers:
+        - name: biometric-shard
+          # Replace with your actual ACR image URL: <registry>.azurecr.io/k8s-demo-app:<tag>
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: Always
+          
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            
+            # Hold startup for 10 seconds to simulate shard initialization
+            - name: HOLD_STARTUP_SECONDS
+              value: "10"
+            
+            # Pod identity for logging and coordination
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            
+            # Service name for peer discovery via DNS
+            - name: SERVICE_NAME
+              value: "biometric-shard-headless"
+            
+            # Cluster configuration
+            - name: CLUSTER_NAME
+              value: biometric-cluster
+            
+            - name: CLUSTER_DOMAIN
+              value: cluster.local
+            
+            # Resource awareness - injected from resource spec
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: biometric-shard
+                  resource: requests.cpu
+            
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: biometric-shard
+                  resource: requests.memory
+            
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: biometric-shard
+                  resource: limits.cpu
+            
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: biometric-shard
+                  resource: limits.memory
+          
+          # Guaranteed QoS: requests == limits for predictable VM-like behavior
+          resources:
+            requests:
+              cpu: "4000m"      # 4 CPU cores
+              memory: "32Gi"    # 32 GiB memory (biometric index requirement)
+            limits:
+              cpu: "4000m"      # Same as requests for Guaranteed QoS
+              memory: "32Gi"    # Same as requests for Guaranteed QoS
+          
+          # VM-like probes: Conservative settings to avoid unnecessary restarts
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30  # Allow up to 150 seconds for startup (30 * 5s)
+            successThreshold: 1
+          
+          # Readiness reflects cluster health - pod should be ready only if cluster is formed
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          
+          # NO liveness probe by default - avoid kubelet-induced restarts
+          # Uncomment only if you have confidence in liveness detection
+          # livenessProbe:
+          #   httpGet:
+          #     path: /health/liveness
+          #     port: http
+          #   initialDelaySeconds: 60
+          #   periodSeconds: 30
+          #   timeoutSeconds: 5
+          #   failureThreshold: 3
+          
+          # Graceful shutdown: Call preStop hook to allow shard to deregister
+          lifecycle:
+            preStop:
+              exec:
+                # Sleep to allow connections to drain before SIGTERM
+                # In production, this could be a script that deregisters the shard
+                command: ["/bin/sh", "-c", "sleep 30"]
+          
+          # Volume mount for persistent data
+          volumeMounts:
+            - name: biometric-data
+              mountPath: /data
+  
+  # Persistent storage for each shard
+  volumeClaimTemplates:
+    - metadata:
+        name: biometric-data
+        labels:
+          app.kubernetes.io/name: biometric-shards
+          app.kubernetes.io/component: shard-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        # Use default storage class or override in overlays
+        # storageClassName: managed-csi-premium
+        resources:
+          requests:
+            storage: 100Gi  # Biometric data storage per shard

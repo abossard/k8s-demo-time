@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: biometric-shards
+  labels:
+    workload-type: stateful-vm-like
+    criticality: high
+    app.kubernetes.io/name: biometric-shards
+    app.kubernetes.io/component: stateful-storage

@@ -1,0 +1,85 @@
+---
+# Karpenter NodePool for SKU exploration phase
+# This NodePool allows Karpenter to provision nodes with enough memory for multiple 32Gi pods
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: biometric-explore
+  annotations:
+    kubernetes.io/description: "NodePool for biometric shard SKU exploration - provisions nodes that can fit 2+ shards (64Gi+ memory)"
+spec:
+  # Disruption settings: Conservative during exploration to avoid churn
+  disruption:
+    consolidationPolicy: WhenEmpty  # Only consolidate completely empty nodes
+    consolidateAfter: 5m            # Wait 5 minutes before consolidating
+    budgets:
+      - nodes: "0"  # Do not disrupt nodes during exploration phase
+  
+  # No hard limits - let Karpenter provision what's needed for 10 shards
+  # Each shard needs 32Gi, so theoretical minimum is 320Gi total
+  # In practice, we want 2 shards per node (64Gi + overhead), so ~5-6 nodes
+  
+  template:
+    metadata:
+      labels:
+        kubernetes.azure.com/ebpf-dataplane: cilium
+        workload-type: biometric-shards
+        nodepool: biometric-explore
+        phase: exploration
+    
+    spec:
+      # Nodes should not expire during exploration
+      expireAfter: Never
+      
+      # Reference to AKSNodeClass (assumed to exist or be created separately)
+      nodeClassRef:
+        group: karpenter.azure.com
+        kind: AKSNodeClass
+        name: default
+      
+      # Requirements to select appropriate Azure VM SKUs
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values:
+            - amd64
+        
+        - key: kubernetes.io/os
+          operator: In
+          values:
+            - linux
+        
+        # On-demand for predictable exploration
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values:
+            - on-demand
+        
+        # Select SKU families that have high-memory options
+        # D-series (general purpose), E-series (memory optimized), M-series (large memory)
+        - key: karpenter.azure.com/sku-family
+          operator: In
+          values:
+            - D  # D-series: Dv5, Dsv5 (balanced)
+            - E  # E-series: Ev5, Esv5 (memory optimized)
+        
+        # Require at least 64Gi memory to fit 2 shards per node
+        # Standard_E8s_v5: 8 vCPU, 64 GiB (~61Gi allocatable)
+        # Standard_E16s_v5: 16 vCPU, 128 GiB (~123Gi allocatable, fits 3 shards)
+        # Standard_D16s_v5: 16 vCPU, 64 GiB (~61Gi allocatable)
+        - key: karpenter.azure.com/sku-memory
+          operator: Gt
+          values:
+            - "61440"  # 60Gi in MiB (to fit 2x 32Gi pods + system overhead)
+        
+        # Require at least 8 vCPUs to support 2 shards @ 4 CPU each
+        - key: karpenter.azure.com/sku-cpu
+          operator: Gt
+          values:
+            - "7"  # At least 8 vCPUs
+      
+      # Cilium startup taint (standard for AKS with Cilium)
+      startupTaints:
+        - effect: NoExecute
+          key: node.cilium.io/agent-not-ready
+          value: "true"
