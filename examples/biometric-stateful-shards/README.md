@@ -90,12 +90,44 @@ Traditional Kubernetes workloads are ephemeral and cattle-like. This tutorial de
 
 ## Prerequisites
 
+Before starting this tutorial, ensure you have:
+
 - **Kubernetes cluster**: AKS 1.28+ with Karpenter enabled
 - **kubectl**: Configured to access your cluster
 - **Karpenter**: Installed and configured ([AKS Node Auto Provisioning](https://learn.microsoft.com/en-us/azure/aks/node-autoprovision))
 - **AKSNodeClass**: Default node class available (`default`)
 - **Metrics Server**: For `kubectl top` commands (optional)
 - **Demo App Image**: K8sDemoApp built and pushed to your ACR
+
+### Build and Push Demo App Image
+
+This tutorial uses the K8sDemoApp from this repository. Build and push it to your ACR:
+
+```bash
+# Set your registry name (from infra deployment)
+REGISTRY_NAME="your-acr-name"  # e.g., k8sdemoanbo
+REGISTRY_LOGIN_SERVER=$(az acr show --name $REGISTRY_NAME --query loginServer -o tsv)
+
+# Build and push
+cd /path/to/k8s-demo-time
+export DOCKER_DEFAULT_PLATFORM=linux/amd64
+IMAGE_TAG=$(git rev-parse --short HEAD)
+docker build --platform linux/amd64 -t $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG .
+
+az acr login --name $REGISTRY_NAME
+docker push $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG
+docker tag $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG \
+           $REGISTRY_LOGIN_SERVER/k8s-demo-app:latest
+docker push $REGISTRY_LOGIN_SERVER/k8s-demo-app:latest
+```
+
+Then update the image reference in `k8s/base/04-statefulset.yaml`:
+
+```yaml
+containers:
+  - name: biometric-shard
+    image: your-registry.azurecr.io/k8s-demo-app:latest  # Update this
+```
 
 ### Verify Prerequisites
 

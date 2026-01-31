@@ -23,7 +23,7 @@ spec:
           operator: Equal
           value: reserved
           effect: NoSchedule
-      
+
       # Schedule onto nodes in the stable node pool
       affinity:
         nodeAffinity:
