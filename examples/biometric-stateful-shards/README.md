@@ -140,7 +140,34 @@ kubectl get aksnodeclass
 
 # Verify metrics-server (optional)
 kubectl get deployment -n kube-system metrics-server
+
+# Validate all manifests (recommended before deployment)
+cd examples/biometric-stateful-shards
+./scripts/validate-manifests.sh
 ```
+
+**Manifest Validation:**
+
+Before deploying, you can validate all Kubernetes manifests:
+
+```bash
+# Automated validation script (installs kubeconform if needed)
+./scripts/validate-manifests.sh
+
+# Manual validation with kubectl (requires cluster connection)
+kubectl apply --dry-run=server -f k8s/base/
+kubectl apply --dry-run=server -f k8s/overlays/explore/nodepool.yaml
+kubectl apply --dry-run=server -f k8s/overlays/explore/vpa.yaml
+
+# Manual validation with kubeconform (no cluster needed)
+kubeconform -summary k8s/base/*.yaml
+```
+
+The validation script checks:
+- ✅ All base manifests for schema compliance
+- ✅ YAML syntax for CRDs (NodePool, VPA)
+- ⏭️ Skips patch files (meant for strategic merge, not standalone)
+
 
 ## Phase 1: Explore - SKU Optimization
 

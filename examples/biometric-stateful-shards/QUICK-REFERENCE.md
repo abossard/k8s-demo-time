@@ -5,6 +5,11 @@
 ```bash
 # Deploy explore phase
 cd examples/biometric-stateful-shards
+
+# Validate manifests first (recommended)
+./scripts/validate-manifests.sh
+
+# Deploy
 ./scripts/deploy-explore.sh
 
 # Verify deployment
@@ -15,6 +20,23 @@ cd examples/biometric-stateful-shards
 ```
 
 ## Essential Commands
+
+### Validation
+
+```bash
+# Validate all manifests with automated script
+./scripts/validate-manifests.sh
+
+# Validate with kubectl (requires cluster connection)
+kubectl apply --dry-run=server -f k8s/base/
+kubectl apply --dry-run=server -f k8s/overlays/explore/
+
+# Validate YAML syntax only (no cluster needed)
+kubeconform -summary k8s/base/*.yaml
+
+# Validate individual files
+kubectl apply --dry-run=client -f k8s/base/04-statefulset.yaml
+```
 
 ### Deployment
 
