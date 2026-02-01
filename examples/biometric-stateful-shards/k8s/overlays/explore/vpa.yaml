@@ -1,0 +1,42 @@
+---
+# VPA for Resource Discovery (Explore Phase Only)
+# This VPA runs in "Off" mode to provide recommendations without modifying pods
+# Use these recommendations to right-size resources for the stable phase
+
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: biometric-shard-vpa
+  namespace: biometric-shards
+  labels:
+    app.kubernetes.io/name: biometric-shards
+    app.kubernetes.io/component: vpa
+  annotations:
+    tutorial.k8s-demo/phase: "explore"
+    tutorial.k8s-demo/description: "VPA in Off mode for resource recommendations during exploration"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: biometric-shard
+
+  # Off mode: Provides recommendations WITHOUT modifying pods
+  # This is critical for VM-like workloads where we want manual control
+  updatePolicy:
+    updateMode: "Off"
+
+  resourcePolicy:
+    containerPolicies:
+      - containerName: biometric-shard
+        controlledResources:
+          - cpu
+          - memory
+
+        # Bounds for recommendations (not enforced, just guidance)
+        minAllowed:
+          cpu: "2000m"      # Minimum 2 CPU cores
+          memory: "24Gi"    # Minimum 24Gi (below initial 32Gi)
+
+        maxAllowed:
+          cpu: "8000m"      # Maximum 8 CPU cores
+          memory: "48Gi"    # Maximum 48Gi (above initial 32Gi)

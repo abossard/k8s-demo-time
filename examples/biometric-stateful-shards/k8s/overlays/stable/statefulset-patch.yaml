@@ -1,0 +1,36 @@
+---
+# Patch to add node affinity and tolerations for stable phase
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: biometric-shard
+  namespace: biometric-shards
+spec:
+  template:
+    spec:
+      # Tolerate the biometric taint on stable nodes
+      tolerations:
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 300
+        # NEW: Tolerate biometric taint for stable nodes
+        - key: biometric
+          operator: Equal
+          value: reserved
+          effect: NoSchedule
+
+      # Schedule onto nodes in the stable node pool
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nodepool
+                    operator: In
+                    values:
+                      - biometric-stable

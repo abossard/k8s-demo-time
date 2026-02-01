@@ -1,0 +1,16 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: biometric-shard
+  namespace: biometric-shards
+  labels:
+    app.kubernetes.io/name: biometric-shards
+    app.kubernetes.io/component: stateful-storage
+spec:
+  minAvailable: 10  # All 10 shards must be available - system is down if any shard is missing
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: biometric-shards
+      app.kubernetes.io/component: shard
+  unhealthyPodEvictionPolicy: IfHealthyBudget  # Only evict unhealthy pods if budget is met

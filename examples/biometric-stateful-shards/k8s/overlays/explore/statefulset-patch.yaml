@@ -1,0 +1,20 @@
+---
+# Patch to add node affinity for explore phase
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: biometric-shard
+  namespace: biometric-shards
+spec:
+  template:
+    spec:
+      # Schedule onto nodes created by the biometric-explore NodePool
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nodepool
+                    operator: In
+                    values:
+                      - biometric-explore

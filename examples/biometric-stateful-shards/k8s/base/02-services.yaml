@@ -1,0 +1,45 @@
+---
+# Headless Service for peer discovery and StatefulSet DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: biometric-shard-headless
+  namespace: biometric-shards
+  labels:
+    app.kubernetes.io/name: biometric-shards
+    app.kubernetes.io/component: stateful-storage
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true  # Allow DNS resolution even if pods are not ready (for peer discovery)
+  selector:
+    app.kubernetes.io/name: biometric-shards
+    app.kubernetes.io/component: shard
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+---
+# Regular Service for external access
+apiVersion: v1
+kind: Service
+metadata:
+  name: biometric-shard
+  namespace: biometric-shards
+  labels:
+    app.kubernetes.io/name: biometric-shards
+    app.kubernetes.io/component: stateful-storage
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: biometric-shards
+    app.kubernetes.io/component: shard
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  sessionAffinity: ClientIP  # Maintain session affinity for consistent routing
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600

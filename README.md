@@ -206,6 +206,31 @@ flowchart TD
     P -->|coordinate action| Q
 ```
 
+## Tutorials and Examples
+
+### 📚 Biometric Stateful Shards - VM-Style Workload Tutorial
+
+A comprehensive tutorial demonstrating how to operate a **stateful VM-like workload** on Kubernetes with cost-efficient SKU optimization using Karpenter.
+
+**Use Case:** 10 fixed biometric index shards (32Gi RAM each) where any single failure makes the system unavailable.
+
+**What You'll Learn:**
+- VM-like behavior: Guaranteed QoS, manual updates (OnDelete), stable identity
+- Two-phase optimization: Explore SKUs → Observe packing → Pin to stable nodes
+- Cost analysis with aks-node-viewer and node packing strategies
+- PodDisruptionBudget constraints and operational trade-offs
+- Karpenter NodePool configuration (YAML-only, no Terraform)
+
+**Get Started:**
+```bash
+cd examples/biometric-stateful-shards
+./scripts/deploy-explore.sh
+```
+
+[📖 Read the full tutorial](examples/biometric-stateful-shards/README.md) | [⚡ Quick Reference](examples/biometric-stateful-shards/QUICK-REFERENCE.md)
+
+---
+
 ## Next Steps
 
 - Hook the deployment into VPA/HPA demos using the built-in stress controls.
