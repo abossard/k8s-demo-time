@@ -8,7 +8,7 @@ metadata:
 spec:
   # Limit total resources to constrain node count (1-3 nodes with 2 CPU + 4GB each)
   limits:
-    cpu: "6"        # 3 nodes * 2 vCPUs = 6 total CPUs max
+    cpu: "8"        # 3 nodes * 2 vCPUs = 6 total CPUs max
     memory: 16Gi    # 3 nodes * 4GB = 12GB total memory max
   
   # Node disruption settings for bin-packing demo
@@ -62,7 +62,7 @@ spec:
         - key: karpenter.azure.com/sku-cpu
           operator: In
           values:
-          - "2"
+          - "4"
         
         # # Limit to 4GB memory (4096 MB)
         # - key: karpenter.azure.com/sku-memory

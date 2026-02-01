@@ -25,21 +25,15 @@ The Kubernetes scheduler uses bin packing algorithms to place pods on nodes base
 This tutorial takes you through **7 iterations**, each making your deployment more cost-efficient but potentially less stable:
 
 ```mermaid
-flowchart LR
-    A["Step 1:<br/>Static VM-like<br/>💰💰💰💰<br/>🟢🟢🟢🟢"] --> B["Step 2:<br/>QoS Aware<br/>💰💰💰<br/>🟢🟢🟢"]
+flowchart TB
+    A["Step 1:<br/>Static VM-like<br/>💰💰💰💰<br/>🟢🟢🟢🟢"] --> B["Step 2:<br/>No Limits<br/>💰💰💰<br/>🟢🟢🟢"]
     B --> C["Step 3:<br/>With Limits<br/>💰💰💰<br/>🟢🟢🟢"]
     C --> D["Step 4:<br/>Manual scale-out<br/>💰💰<br/>🟢🟢"]
     D --> E["Step 5:<br/>Add VPA<br/>💰💰<br/>🟢🟢"]
     E --> F["Step 6:<br/>Mixed QoS<br/>💰<br/>🟡"]
     F --> G["Step 7:<br/>Extreme<br/>💰<br/>🔴"]
     
-    style A fill:#e8f5e9
-    style B fill:#c8e6c9
-    style C fill:#a5d6a7
-    style D fill:#ffecb3
-    style E fill:#ffe082
-    style F fill:#ffab91
-    style G fill:#ef9a9a
+   
 ```
 
 **Legend:**

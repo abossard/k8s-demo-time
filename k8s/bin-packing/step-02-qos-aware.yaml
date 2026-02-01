@@ -19,7 +19,7 @@ metadata:
     tier: frontend
     tutorial-step: "02-qos-aware"
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: frontend
@@ -113,7 +113,7 @@ metadata:
     tier: backend
     tutorial-step: "02-qos-aware"
 spec:
-  replicas: 4  # Can deploy more with Burstable QoS
+  replicas: 4 # Can deploy more with Burstable QoS
   selector:
     matchLabels:
       app: backend

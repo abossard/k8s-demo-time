@@ -18,7 +18,7 @@ metadata:
     tier: frontend
     tutorial-step: "01-static"
 spec:
-  replicas: 3  # Fixed, 1 per node on small cluster
+  replicas: 8  # Fixed, 1 per node on small cluster
   selector:
     matchLabels:
       app: frontend
@@ -72,10 +72,10 @@ spec:
           # Conservative VM-like allocation (~33% of node)
           resources:
             requests:
-              cpu: "500m"        # ~32% of 1900m CPU
+              cpu: "100m"        # ~32% of 1900m CPU
               memory: "900Mi"    # ~31% of 2856Mi RAM
             limits:
-              cpu: "500m"        # Same as request = Guaranteed
+              cpu: "100m"        # Same as request = Guaranteed
               memory: "900Mi"    # Same as request = Guaranteed
           startupProbe:
             httpGet:
@@ -110,7 +110,7 @@ metadata:
     tier: backend
     tutorial-step: "01-static"
 spec:
-  replicas: 3  # Fixed, share nodes with frontend
+  replicas: 8  # Fixed, share nodes with frontend
   selector:
     matchLabels:
       app: backend
@@ -162,10 +162,10 @@ spec:
               containerPort: 8080
           resources:
             requests:
-              cpu: "500m"       # ~26% of node capacity
+              cpu: "100m"       # ~26% of node capacity
               memory: "700Mi"   # ~24% of node capacity
             limits:
-              cpu: "500m"
+              cpu: "100m"
               memory: "700Mi"
           startupProbe:
             httpGet:
