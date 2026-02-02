@@ -1,0 +1,55 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  annotations:
+    karpenter.sh/nodepool-hash: "15891827758485695679"
+    karpenter.sh/nodepool-hash-version: v3
+    kubernetes.io/description: General purpose NodePool for generic workloads
+    meta.helm.sh/release-name: aks-managed-karpenter-overlay
+    meta.helm.sh/release-namespace: kube-system
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    helm.toolkit.fluxcd.io/name: karpenter-overlay-main-adapter-helmrelease
+    helm.toolkit.fluxcd.io/namespace: 6980a10033e9840001910119
+  name: default
+spec:
+  disruption:
+    budgets:
+    - nodes: 30%
+    consolidateAfter: 0s
+    consolidationPolicy: WhenEmptyOrUnderutilized
+  template:
+    metadata:
+      labels:
+        kubernetes.azure.com/ebpf-dataplane: cilium
+    spec:
+      expireAfter: Never
+      nodeClassRef:
+        group: karpenter.azure.com
+        kind: AKSNodeClass
+        name: default
+      requirements:
+      - key: karpenter.azure.com/sku-storage-ephemeralos-maxsize
+        operator: Gt
+        values: ["128"]
+      - key: kubernetes.io/arch
+        operator: In
+        values:
+        - amd64
+      - key: kubernetes.io/os
+        operator: In
+        values:
+        - linux
+      - key: karpenter.sh/capacity-type
+        operator: In
+        values:
+        - spot
+        - on-demand
+      - key: karpenter.azure.com/sku-family
+        operator: In
+        values:
+        - F
+      startupTaints:
+      - effect: NoExecute
+        key: node.cilium.io/agent-not-ready
+        value: "true"

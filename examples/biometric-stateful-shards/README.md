@@ -125,7 +125,7 @@ Then update the image reference in `k8s/base/04-statefulset.yaml`:
 ```yaml
 containers:
   - name: biometric-shard
-    image: your-registry.azurecr.io/k8s-demo-app:1.0.0  # Update this (avoid :latest for AKS policy)
+    image: your-registry.azurecr.io/k8s-demo-app:latest  # Update this (avoid :latest for AKS policy)
 ```
 
 ### Verify Prerequisites

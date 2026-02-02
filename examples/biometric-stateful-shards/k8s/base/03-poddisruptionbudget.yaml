@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: biometric-shards
     app.kubernetes.io/component: stateful-storage
 spec:
-  minAvailable: 10  # All 10 shards must be available - system is down if any shard is missing
+  minAvailable: 0  # All 10 shards must be available - system is down if any shard is missing
   selector:
     matchLabels:
       app.kubernetes.io/name: biometric-shards

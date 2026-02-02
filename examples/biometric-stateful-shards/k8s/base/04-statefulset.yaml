@@ -15,7 +15,7 @@ spec:
   updateStrategy:
     type: OnDelete
   # Ordered, sequential pod creation for stable peer discovery
-  podManagementPolicy: OrderedReady
+  podManagementPolicy: Parallel
   selector:
     matchLabels:
       app.kubernetes.io/name: biometric-shards
@@ -39,7 +39,7 @@ spec:
       priorityClassName: biometric-critical
 
       # VM-like behavior: Long grace period for clean shutdown
-      terminationGracePeriodSeconds: 120
+      terminationGracePeriodSeconds: 0
 
       # VM-like behavior: Reduce rescheduling churn - tolerate node issues longer
       tolerations:
@@ -74,7 +74,7 @@ spec:
           # IMPORTANT: Replace with your actual ACR image URL
           # Example: myregistry.azurecr.io/k8s-demo-app:latest
           # See main README for build and push instructions
-          image: k8sdemoanbo.azurecr.io/k8s-demo-app:1.0.0
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
           imagePullPolicy: Always
 
           ports:
@@ -204,7 +204,7 @@ spec:
               exec:
                 # Sleep to allow connections to drain before SIGTERM
                 # In production, this could be a script that deregisters the shard
-                command: ["/bin/sh", "-c", "sleep 30"]
+                command: ["/bin/sh", "-c", "sleep 1"]
 
           # Volume mount for persistent data
           volumeMounts:

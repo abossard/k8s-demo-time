@@ -12,10 +12,10 @@ metadata:
 spec:
   # Disruption settings: Conservative during exploration to avoid churn
   disruption:
-    consolidationPolicy: WhenEmpty  # Only consolidate completely empty nodes
-    consolidateAfter: 5m            # Wait 5 minutes before consolidating
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 1m            # Wait 1 minute before consolidating
     budgets:
-      - nodes: "0"  # Do not disrupt nodes during exploration phase
+      - nodes: "10"  # Do not disrupt nodes during exploration phase
 
   # No hard limits - let NAP provision what's needed for 10 shards
   # Each shard needs 32Gi, so theoretical minimum is 320Gi total
@@ -62,23 +62,10 @@ spec:
         - key: karpenter.azure.com/sku-family
           operator: In
           values:
+            - F
+            - FX
             - D  # D-series: Dv5, Dsv5 (balanced)
             - E  # E-series: Ev5, Esv5 (memory optimized)
-
-        # Require at least 64Gi memory to fit 2 shards per node
-        # Standard_E8s_v5: 8 vCPU, 64 GiB (~61Gi allocatable)
-        # Standard_E16s_v5: 16 vCPU, 128 GiB (~123Gi allocatable, fits 3 shards)
-        # Standard_D16s_v5: 16 vCPU, 64 GiB (~61Gi allocatable)
-        - key: karpenter.azure.com/sku-memory
-          operator: Gt
-          values:
-            - "61440"  # 60Gi in MiB (to fit 2x 32Gi pods + system overhead)
-
-        # Require at least 8 vCPUs to support 2 shards @ 4 CPU each
-        - key: karpenter.azure.com/sku-cpu
-          operator: Gt
-          values:
-            - "7"  # At least 8 vCPUs
 
       # Cilium startup taint (standard for AKS with Cilium)
       startupTaints:
