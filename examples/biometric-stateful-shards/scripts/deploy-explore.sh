@@ -29,9 +29,10 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 echo "✅ Cluster access verified"
 
-# Check if Karpenter is running
-if ! kubectl get deployment -n kube-system | grep -q karpenter; then
-    echo "⚠️  Warning: Karpenter not found. This deployment requires Karpenter."
+# Check if AKS Node Auto Provisioning (Karpenter-compatible CRDs) is available
+if ! kubectl get crd nodepools.karpenter.sh &> /dev/null || ! kubectl get crd aksnodeclasses.karpenter.azure.com &> /dev/null; then
+    echo "⚠️  Warning: AKS Node Auto Provisioning (NAP) CRDs not found."
+    echo "   This example expects the Karpenter-compatible NodePool and AKSNodeClass CRDs."
     read -p "Continue anyway? (y/N) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -61,8 +62,8 @@ echo ""
 echo "Applying explore NodePool..."
 kubectl apply -f "$K8S_EXPLORE_DIR/nodepool.yaml"
 
-echo "Applying explore StatefulSet patch..."
-kubectl apply -f "$K8S_EXPLORE_DIR/statefulset-patch.yaml"
+echo "Patching StatefulSet for explore affinity..."
+kubectl patch statefulset biometric-shard -n biometric-shards --type=merge --patch-file "$K8S_EXPLORE_DIR/statefulset-patch.yaml"
 
 echo ""
 read -p "Deploy VPA for resource optimization? (y/N) " -n 1 -r
@@ -82,7 +83,7 @@ echo "Deployment Initiated!"
 echo "======================================"
 echo ""
 echo "⏳ Waiting for pods to be ready (this may take 5-10 minutes)..."
-echo "   Karpenter will provision nodes as needed."
+echo "   AKS Node Auto Provisioning (NAP) will provision nodes as needed."
 echo ""
 
 # Wait for StatefulSet to exist

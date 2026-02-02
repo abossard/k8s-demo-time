@@ -1,10 +1,5 @@
 ---
-# Patch to add node affinity and tolerations for stable phase
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: biometric-shard
-  namespace: biometric-shards
+# Merge patch to add node affinity and tolerations for stable phase
 spec:
   template:
     spec:

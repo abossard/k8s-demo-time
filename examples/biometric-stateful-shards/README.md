@@ -1,6 +1,6 @@
 # Biometric Stateful Shards: VM-Style Workload on Kubernetes
 
-This tutorial demonstrates how to operate a **VM-style stateful workload** on Kubernetes with cost-efficient SKU optimization using Karpenter on Azure AKS. The example models a biometric index/shard system where:
+This tutorial demonstrates how to operate a **VM-style stateful workload** on Kubernetes with cost-efficient SKU optimization using **AKS Node Auto Provisioning (NAP)** (Karpenter-compatible) on Azure AKS. The example models a biometric index/shard system where:
 
 - **10 fixed shards** are required (no dynamic scaling)
 - Each shard needs **32Gi RAM** with Guaranteed QoS
@@ -83,7 +83,7 @@ Traditional Kubernetes workloads are ephemeral and cattle-like. This tutorial de
 | **Storage** | Often stateless | Dedicated PVC per instance (100Gi each) |
 | **Updates** | Rolling updates | Manual `OnDelete` - explicit one-by-one upgrade |
 | **Restarts** | Frequent (liveness probe) | No liveness probe - avoid kubelet restarts |
-| **Eviction** | Allowed by default | PDB: minAvailable=10, Karpenter: do-not-disrupt |
+| **Eviction** | Allowed by default | PDB: minAvailable=10, NAP: do-not-disrupt |
 | **QoS** | Burstable | Guaranteed (requests = limits) |
 | **Scheduling** | Best-effort spread | Topology spread + node affinity |
 | **Tolerance** | Quick reschedule | Long tolerations (5min) for node issues |
@@ -92,9 +92,9 @@ Traditional Kubernetes workloads are ephemeral and cattle-like. This tutorial de
 
 Before starting this tutorial, ensure you have:
 
-- **Kubernetes cluster**: AKS 1.28+ with Karpenter enabled
+- **Kubernetes cluster**: AKS 1.28+ with **Node Auto Provisioning (NAP)** enabled
 - **kubectl**: Configured to access your cluster
-- **Karpenter**: Installed and configured ([AKS Node Auto Provisioning](https://learn.microsoft.com/en-us/azure/aks/node-autoprovision))
+- **AKS Node Auto Provisioning (NAP)**: Enabled and configured ([AKS Node Auto Provisioning](https://learn.microsoft.com/en-us/azure/aks/node-autoprovision))
 - **AKSNodeClass**: Default node class available (`default`)
 - **Metrics Server**: For `kubectl top` commands (optional)
 - **Demo App Image**: K8sDemoApp built and pushed to your ACR
@@ -105,20 +105,19 @@ This tutorial uses the K8sDemoApp from this repository. Build and push it to you
 
 ```bash
 # Set your registry name (from infra deployment)
-REGISTRY_NAME="your-acr-name"  # e.g., k8sdemoanbo
+REGISTRY_NAME="k8sdemoanbo"  # e.g., k8sdemoanbo
 REGISTRY_LOGIN_SERVER=$(az acr show --name $REGISTRY_NAME --query loginServer -o tsv)
 
-# Build and push
+# Build and push with ACR Tasks (server-side build)
 cd /path/to/k8s-demo-time
-export DOCKER_DEFAULT_PLATFORM=linux/amd64
 IMAGE_TAG=$(git rev-parse --short HEAD)
-docker build --platform linux/amd64 -t $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG .
 
-az acr login --name $REGISTRY_NAME
-docker push $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG
-docker tag $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG \
-           $REGISTRY_LOGIN_SERVER/k8s-demo-app:latest
-docker push $REGISTRY_LOGIN_SERVER/k8s-demo-app:latest
+# Trigger ACR Task build and push
+az acr build --registry $REGISTRY_NAME \
+  --image k8s-demo-app:$IMAGE_TAG \
+  --image k8s-demo-app:latest \
+  --platform linux/amd64 \
+  .
 ```
 
 Then update the image reference in `k8s/base/04-statefulset.yaml`:
@@ -126,14 +125,15 @@ Then update the image reference in `k8s/base/04-statefulset.yaml`:
 ```yaml
 containers:
   - name: biometric-shard
-    image: your-registry.azurecr.io/k8s-demo-app:latest  # Update this
+    image: your-registry.azurecr.io/k8s-demo-app:1.0.0  # Update this (avoid :latest for AKS policy)
 ```
 
 ### Verify Prerequisites
 
 ```bash
-# Check Karpenter is running
-kubectl get deployment -n kube-system | grep karpenter
+# Check NAP (Karpenter-compatible) CRDs are installed
+kubectl get crd nodepools.karpenter.sh
+kubectl get crd aksnodeclasses.karpenter.azure.com
 
 # Check AKSNodeClass exists
 kubectl get aksnodeclass
@@ -171,7 +171,7 @@ The validation script checks:
 
 ## Phase 1: Explore - SKU Optimization
 
-In the **explore phase**, we deploy the workload and let Karpenter provision nodes from a broad range of SKUs. This allows us to observe which instance types provide the best cost/performance balance.
+In the **explore phase**, we deploy the workload and let AKS Node Auto Provisioning (NAP) provision nodes from a broad range of SKUs. This allows us to observe which instance types provide the best cost/performance balance.
 
 ### Step 1: Deploy Base Resources
 
@@ -199,13 +199,14 @@ kubectl apply -f k8s/base/03-poddisruptionbudget.yaml
 # Apply explore overlay (NodePool + StatefulSet with affinity)
 kubectl apply -f k8s/overlays/explore/nodepool.yaml
 kubectl apply -f k8s/base/04-statefulset.yaml
-kubectl apply -f k8s/overlays/explore/statefulset-patch.yaml
+kubectl patch statefulset biometric-shard -n biometric-shards \
+  --type=merge --patch-file k8s/overlays/explore/statefulset-patch.yaml
 ```
 
 **What this does:**
-- Creates Karpenter NodePool `biometric-explore` with:
+- Creates a NAP (Karpenter-compatible) NodePool `biometric-explore` with:
   - SKU requirements: E-series or D-series, 64Gi+ memory, 8+ CPUs
-  - Allows Karpenter to choose from multiple SKUs
+  - Allows NAP to choose from multiple SKUs
   - Conservative disruption: `WhenEmpty` only, no budget for disruption
 - Deploys StatefulSet with 10 replicas, each requiring 32Gi RAM (Guaranteed QoS)
 - Patches StatefulSet to schedule on `nodepool=biometric-explore` nodes
@@ -428,7 +429,8 @@ limits:
 kubectl apply -f k8s/overlays/stable/nodepool.yaml
 
 # Apply stable StatefulSet patch (adds tolerations and stable node affinity)
-kubectl apply -f k8s/overlays/stable/statefulset-patch.yaml
+kubectl patch statefulset biometric-shard -n biometric-shards \
+  --type=merge --patch-file k8s/overlays/stable/statefulset-patch.yaml
 ```
 
 **Note:** Existing pods won't be rescheduled automatically due to `OnDelete` update strategy. Nodes will be gradually replaced as Karpenter provisions stable nodes.

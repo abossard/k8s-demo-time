@@ -1,5 +1,5 @@
 ---
-# Karpenter NodePool for stable production phase
+# AKS Node Auto Provisioning (Karpenter-compatible) NodePool for stable production phase
 # This NodePool provisions nodes based on lessons learned from exploration
 # Configure with the optimal SKU discovered during exploration
 apiVersion: karpenter.sh/v1

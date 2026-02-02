@@ -34,6 +34,7 @@ spec:
   selector:
     app.kubernetes.io/name: biometric-shards
     app.kubernetes.io/component: shard
+    app.kubernetes.io/service: shard
   ports:
     - name: http
       port: 80

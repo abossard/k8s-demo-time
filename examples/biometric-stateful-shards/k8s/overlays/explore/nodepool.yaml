@@ -1,6 +1,6 @@
 ---
-# Karpenter NodePool for SKU exploration phase
-# This NodePool allows Karpenter to provision nodes with enough memory for multiple 32Gi pods
+# AKS Node Auto Provisioning (Karpenter-compatible) NodePool for SKU exploration phase
+# This NodePool allows NAP to provision nodes with enough memory for multiple 32Gi pods
 apiVersion: karpenter.sh/v1
 kind: NodePool
 metadata:
@@ -17,7 +17,7 @@ spec:
     budgets:
       - nodes: "0"  # Do not disrupt nodes during exploration phase
 
-  # No hard limits - let Karpenter provision what's needed for 10 shards
+  # No hard limits - let NAP provision what's needed for 10 shards
   # Each shard needs 32Gi, so theoretical minimum is 320Gi total
   # In practice, we want 2 shards per node (64Gi + overhead), so ~5-6 nodes
 
