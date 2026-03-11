@@ -291,7 +291,7 @@ spec:
     kind: Deployment
     name: frontend
   updatePolicy:
-    updateMode: "Auto"  # Automatically update pods
+    updateMode: "Initial"  # Only set resources on pod creation, no restarts
   resourcePolicy:
     containerPolicies:
       - containerName: k8s-demo-app
@@ -317,7 +317,7 @@ spec:
     kind: Deployment
     name: backend
   updatePolicy:
-    updateMode: "Auto"
+    updateMode: "Initial"
   resourcePolicy:
     containerPolicies:
       - containerName: k8s-demo-app
@@ -343,7 +343,7 @@ spec:
     kind: Deployment
     name: worker
   updatePolicy:
-    updateMode: "Auto"
+    updateMode: "Initial"
   resourcePolicy:
     containerPolicies:
       - containerName: k8s-demo-app

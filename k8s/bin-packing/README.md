@@ -26,7 +26,7 @@ This tutorial takes you through **7 iterations**, each making your deployment mo
 
 ```mermaid
 flowchart TB
-    A["Step 1:<br/>Static VM-like<br/>💰💰💰💰<br/>🟢🟢🟢🟢"] --> B["Step 2:<br/>No Limits<br/>💰💰💰<br/>🟢🟢🟢"]
+    A["Step 1:<br/>Static VM-like<br/>💰💰💰💰<br/>🟢🟢🟢🟢"] --> B["Step 2:<br/>QoS-Aware<br/>💰💰💰<br/>🟢🟢🟢"]
     B --> C["Step 3:<br/>With Limits<br/>💰💰💰<br/>🟢🟢🟢"]
     C --> D["Step 4:<br/>Manual scale-out<br/>💰💰<br/>🟢🟢"]
     D --> E["Step 5:<br/>Add VPA<br/>💰💰<br/>🟢🟢"]
@@ -234,6 +234,9 @@ kubectl get pods -n bin-packing-demo -o custom-columns=NAME:.metadata.name,CPU_R
 
 ```bash
 kubectl apply -f k8s/bin-packing/step-06-mixed-qos.yaml
+
+# Clean up the worker VPA from step 5 so workers become true BestEffort
+kubectl delete vpa worker-vpa -n bin-packing-demo --ignore-not-found
 ```
 
 **Demonstrate Resource Pressure:**
@@ -283,6 +286,9 @@ kubectl get pods -n bin-packing-demo --field-selector status.phase=Failed
 
 ```bash
 kubectl apply -f k8s/bin-packing/step-07-extreme-packing.yaml
+
+# Clean up the worker VPA from step 5 so workers become true BestEffort
+kubectl delete vpa worker-vpa -n bin-packing-demo --ignore-not-found
 ```
 
 **Scale to create pressure (simulating a fast scaler):**
@@ -302,6 +308,9 @@ This section provides detailed click-by-click instructions for presenting this t
 **1. Deploy the extreme configuration:**
 ```bash
 kubectl apply -f k8s/bin-packing/step-07-extreme-packing.yaml
+
+# Clean up stale worker VPA from step 5 (otherwise workers won't be BestEffort)
+kubectl delete vpa worker-vpa -n bin-packing-demo --ignore-not-found
 ```
 **What to say:** "We're deploying an aggressive bin-packing configuration. The frontend is Guaranteed QoS and will stay up, backend is Burstable with minimal requests, and we have many BestEffort pods filling all available space."
 
@@ -370,11 +379,11 @@ watch -n 2 'kubectl get pods -n bin-packing-demo -o wide | grep -E "NAME|fronten
 ```
 **What to say:** "I'm going to watch the pods in real-time to see what happens when we apply load."
 
-**8. In terminal 3, watch HPA:**
+**8. In terminal 3, watch deployments:**
 ```bash
-watch -n 2 'kubectl get hpa -n bin-packing-demo'
+watch -n 2 'kubectl get deployments -n bin-packing-demo'
 ```
-**What to say:** "And here we can see the HPA metrics and current replica counts."
+**What to say:** "And here we can see the current replica counts for each deployment."
 
 **9. In terminal 4, watch events (crucial!):**
 ```bash
@@ -399,7 +408,7 @@ kubectl run curl-test -n bin-packing-demo --rm -it --restart=Never --image=curli
   -d '{"minutes": 5, "threads": 4, "broadcastToAll": true}'
 ```
 
-**What to say:** "I'm starting CPU stress on all frontend pods. This drives up CPU utilization; in production an external scaler or HPA would react. We'll simulate that manually so it happens instantly."
+**What to say:** "I'm starting CPU stress on all frontend pods. This drives up CPU utilization; in production an external scaler or HPA would react. We'll simulate that manually with `kubectl scale` so it happens instantly."
 
 ---
 
@@ -552,9 +561,9 @@ kubectl describe nodes | grep -A 5 "Conditions:"
 - Or reduce node count to create more pressure
 
 **If frontend pods don't scale:**
-- Check HPA: `kubectl describe hpa frontend-hpa -n bin-packing-demo`
+- This step uses manual `kubectl scale`, not HPA — run the scale command yourself
 - Verify metrics server is running: `kubectl get deployment metrics-server -n kube-system`
-- Check if maxReplicas was reached
+- Check if there is enough node capacity for new pods
 
 **If too many pods get evicted:**
 - This means you've truly hit resource limits
@@ -655,16 +664,16 @@ k9s -n bin-packing-demo
 
 ---
 
-**View 3: HPA Status**
+**View 3: Deployments Status**
 ```bash
-:hpa
+:deployments
 ```
 **What to observe:**
-- `MINPODS` / `MAXPODS` / `REPLICAS`: Should show 2/8/2 for frontend
-- `TARGETS`: Should show current vs target utilization (e.g., `15%/70%`)
-- Status should be green/OK
+- `READY` column: Should show desired/ready counts (e.g., `2/2`)
+- `UP-TO-DATE`: All pods on latest spec
+- `AVAILABLE`: Pods serving traffic
 
-**What to say:** "HPA is watching CPU and memory metrics. Currently well below threshold."
+**What to say:** "All deployments are at their baseline replica counts. We'll manually scale them up to simulate what an autoscaler would do."
 
 ---
 
@@ -695,23 +704,23 @@ k9s
 
 ---
 
-**View 4: Watching HPA Scale Decision (30-60 seconds after load)**
+**View 4: Watching Manual Scale-Up (after running kubectl scale)**
 
 In pods view (`:pods`):
 **What to observe:**
 - **Color changes**: Frontend pods may turn yellow (warning) if CPU is high
-- **Status updates**: Watch for `Pending` status as HPA creates new pods
+- **Status updates**: Watch for `Pending` status as new pods are created by manual scaling
 - **CPU column** (press `Shift+C` to sort by CPU): Frontend pods climb to 80-90%
 
 **What to say:** "See the frontend pods' CPU usage climbing. k9s shows this in real-time with color coding - yellow means high utilization."
 
-In HPA view (`:hpa`):
+In deployments view (`:deployments`):
 **What to observe:**
-- `TARGETS` column updates: `85%/70%` (current over target)
-- `REPLICAS` column changes: `2` → `4`
-- Color may change to indicate scaling action
+- `READY` column changes: `2/2` → `2/4` → `4/4`
+- New pods appear in pods view
+- Some BestEffort pods may transition to `Evicted` as space is reclaimed
 
-**What to say:** "The HPA has detected high CPU and decided to scale. Watch the replica count increase."
+**What to say:** "After running `kubectl scale`, new pods are being created. Watch the deployment replicas increase and BestEffort pods getting evicted to make room."
 
 ---
 
@@ -723,7 +732,7 @@ In events view (`:events`):
 ```
 TYPE     REASON              OBJECT                           MESSAGE
 Warning  FailedScheduling    Pod/frontend-xxx-yyy            0/3 nodes available: insufficient cpu
-Normal   TriggeredScaleUp    HorizontalPodAutoscaler/frontend Scaled up from 2 to 4
+Normal   ScalingReplicaSet   Deployment/frontend              Scaled up replica set frontend-xxx to 4
 Warning  Evicted             Pod/worker-xxx                   Pod evicted due to node resource pressure
 Normal   Killing             Pod/worker-xxx                   Stopping container k8s-demo-app
 Normal   Scheduled           Pod/frontend-xxx-zzz            Successfully assigned to node-2
@@ -737,7 +746,7 @@ Normal   Started             Pod/frontend-xxx-zzz            Started container
 3. `Scheduled` - New frontend pod gets the freed-up space
 4. `Killing` - Old low-priority pod is terminated
 
-**What to say:** "HERE'S THE MAGIC! The scheduler couldn't place new frontend pods, so it evicted low-priority BestEffort pods to make room. This is bin packing in action - we prioritized critical services."
+**What to say:** "HERE'S THE MAGIC! The scheduler couldn't place new frontend pods, so it preempted low-priority BestEffort pods to make room. This is bin packing in action - we prioritized critical services."
 
 **Pro tip:** Press `Enter` on an event to see full details
 
@@ -870,7 +879,7 @@ In deployments view (`:dp`):
 - Color-coded bars showing resource usage over time
 - Spikes and trends visible
 
-**What to say:** "Pulse view gives us live metrics. Watch the frontend pods' CPU spike when we trigger load, then HPA scales and distributes the load."
+**What to say:** "Pulse view gives us live metrics. Watch the frontend pods' CPU spike when we trigger load, then see the effect as we manually scale replicas up."
 
 ---
 
@@ -918,8 +927,7 @@ Understanding k9s status colors:
 | **Pods** | `:pods` | Status changes, evictions (red), new pods (creating) |
 | **Events** | `:events` | Eviction events, scheduling failures, scale events |
 | **Nodes** | `:nodes` + `1` | CPU/Memory %, allocation vs usage |
-| **HPA** | `:hpa` | Target metrics, replica count changes |
-| **Deployments** | `:dp` | Desired vs current replicas |
+| **Deployments** | `:dp` | Desired vs current replicas, scaling events |
 | **Xray** | `Shift+X` | Resource topology and relationships |
 | **Pulse** | `Shift+P` | Real-time CPU/Memory graphs |
 
@@ -942,13 +950,13 @@ Understanding k9s status colors:
 - Split terminal with 4 k9s views:
   - Top-left: `:pods` view (watch evictions)
   - Top-right: `:events` view (see eviction events)
-  - Bottom-left: `:hpa` view (watch scaling)
+  - Bottom-left: `:deployments` view (watch replica counts)
   - Bottom-right: `:nodes` view with `1` pressed (resource usage)
 
 **Narration flow:**
 1. "Let me show you our packed cluster in k9s..."
 2. "Watch these terminal windows as I trigger load..."
-3. "There! The HPA is scaling up..."
+3. "There! We've scaled up the replicas manually..."
 4. "And now - see the red pods? Those are evictions happening in real-time..."
 5. "But notice - all frontend pods stay green, healthy, serving traffic..."
 
@@ -983,7 +991,11 @@ This creates a terminal recording you can share with others or embed in document
 Remove all resources:
 
 ```bash
-kubectl apply -f k8s/bin-packing/step-08-cleanup.yaml
+# Delete the entire namespace (removes all resources within it)
+kubectl delete namespace bin-packing-demo
+
+# Also clean up cluster-scoped PriorityClasses created in steps 6-7
+kubectl delete priorityclass high-priority normal-priority low-priority --ignore-not-found
 ```
 
 ## Key Learnings
@@ -997,7 +1009,7 @@ There's no free lunch. Every optimization comes with trade-offs:
 | Static VM-like | 0% | ⭐⭐⭐⭐⭐ | Low | Critical systems, compliance |
 | QoS Classes | 15% | ⭐⭐⭐⭐⭐ | Low | All production systems |
 | With Limits | 30% | ⭐⭐⭐⭐ | Medium | Standard workloads |
-| With HPA | 45% | ⭐⭐⭐⭐ | Medium | Variable load patterns |
+| With Manual Scaling | 45% | ⭐⭐⭐⭐ | Medium | Variable load patterns |
 | With VPA | 55% | ⭐⭐⭐ | High | Mature, monitored systems |
 | Mixed QoS | 65% | ⭐⭐⭐ | High | Cost-conscious environments |
 | Extreme | 75% | ⭐ | Very High | **Don't do this in production!** |
@@ -1068,13 +1080,13 @@ Common failure modes:
 ## Practical Recommendations
 
 ### For Development/Test Environments
-- Step 3-4 (With Limits + HPA) is usually sufficient
+- Step 3-4 (With Limits + Manual Scaling) is usually sufficient
 - Prioritize fast iteration over perfect efficiency
 - BestEffort pods are acceptable for non-critical services
 
 ### For Production Environments
 - Start with Step 2-3 (QoS + Limits)
-- Add HPA for services with variable load (Step 4)
+- Add scaling (HPA or manual) for services with variable load (Step 4)
 - Consider VPA only after establishing good monitoring (Step 5)
 - Never go beyond Step 6 in production
 - Always maintain at least 25-30% node headroom

@@ -16,6 +16,32 @@ metadata:
 # This is a realistic "cost-optimized" scenario that works under normal load
 # but shows trade-offs when the system needs to grow.
 
+# Priority Classes (must be created before deployments that reference them)
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+value: 1000000
+globalDefault: false
+description: "High priority for critical services"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: normal-priority
+value: 1000
+globalDefault: false
+description: "Normal priority for standard services"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority
+value: 100
+globalDefault: false
+description: "Low priority for batch and cache"
+---
 # Frontend - Critical service with Guaranteed QoS (will remain stable)
 apiVersion: apps/v1
 kind: Deployment
@@ -416,31 +442,6 @@ spec:
             failureThreshold: 3
             timeoutSeconds: 2
 ---
-# Priority Classes
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: high-priority
-value: 1000000
-globalDefault: false
-description: "High priority for critical services"
----
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: normal-priority
-value: 1000
-globalDefault: false
-description: "Normal priority for standard services"
----
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: low-priority
-value: 100
-globalDefault: false
-description: "Low priority for batch and cache"
----
 # VPA - Reasonable bounds for frontend
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
@@ -453,7 +454,7 @@ spec:
     kind: Deployment
     name: frontend
   updatePolicy:
-    updateMode: "Auto"
+    updateMode: "InPlaceOrRecreate"
   resourcePolicy:
     containerPolicies:
       - containerName: k8s-demo-app
@@ -478,7 +479,7 @@ spec:
     kind: Deployment
     name: backend
   updatePolicy:
-    updateMode: "Auto"
+    updateMode: "InPlaceOrRecreate"
   resourcePolicy:
     containerPolicies:
       - containerName: k8s-demo-app
@@ -491,9 +492,6 @@ spec:
         controlledResources:
           - cpu
           - memory
----
-# Scale replicas manually during the extreme demo to show how fast bin packing reacts
-# when an external scaler (or human) forces more critical pods onto the nodes.
 ---
 # Services
 apiVersion: v1

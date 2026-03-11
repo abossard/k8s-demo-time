@@ -10,6 +10,32 @@ metadata:
 # Critical services get Guaranteed, standard get Burstable, batch gets BestEffort
 # This allows much denser packing but with risk of evictions
 
+# Priority Classes (must be created before deployments that reference them)
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+value: 1000000
+globalDefault: false
+description: "High priority for critical services"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: normal-priority
+value: 1000
+globalDefault: false
+description: "Normal priority for standard services"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority
+value: 100
+globalDefault: false
+description: "Low priority for batch jobs and cache"
+---
 # Critical frontend - Guaranteed QoS
 apiVersion: apps/v1
 kind: Deployment
@@ -337,31 +363,6 @@ spec:
             failureThreshold: 3
             timeoutSeconds: 2
 ---
-# Priority Classes
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: high-priority
-value: 1000000
-globalDefault: false
-description: "High priority for critical services"
----
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: normal-priority
-value: 1000
-globalDefault: false
-description: "Normal priority for standard services"
----
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: low-priority
-value: 100
-globalDefault: false
-description: "Low priority for batch jobs and cache"
----
 # VPA for frontend (Guaranteed, so more conservative)
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
@@ -374,7 +375,7 @@ spec:
     kind: Deployment
     name: frontend
   updatePolicy:
-    updateMode: "Auto"
+    updateMode: "Recreate"
   resourcePolicy:
     containerPolicies:
       - containerName: k8s-demo-app
@@ -400,7 +401,7 @@ spec:
     kind: Deployment
     name: backend
   updatePolicy:
-    updateMode: "Auto"
+    updateMode: "Recreate"
   resourcePolicy:
     containerPolicies:
       - containerName: k8s-demo-app
@@ -413,8 +414,6 @@ spec:
         controlledResources:
           - cpu
           - memory
----
-# Scale replicas manually during the demo to simulate a scaler reacting quickly.
 ---
 # Services
 apiVersion: v1
