@@ -107,7 +107,7 @@ spec:
     kind: Deployment
     name: backend-burstable
   updatePolicy:
-    updateMode: "Auto"
+    updateMode: "Recreate"
   resourcePolicy:
     containerPolicies:
       - containerName: k8s-demo-app

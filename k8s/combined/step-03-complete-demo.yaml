@@ -275,7 +275,7 @@ spec:
     kind: Deployment
     name: standard-backend
   updatePolicy:
-    updateMode: "Auto"
+    updateMode: "Recreate"
   resourcePolicy:
     containerPolicies:
       - containerName: k8s-demo-app

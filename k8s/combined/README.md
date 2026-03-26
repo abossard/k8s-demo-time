@@ -296,7 +296,7 @@ kubectl apply -f k8s/combined/step-02-vpa-with-burstable-qos.yaml
 **Features:**
 - Burstable QoS (requests < limits)
 - VPA controls memory resources only
-- Auto update mode (recreates pods when needed)
+- Recreate update mode (recreates pods when needed)
 - Min 128Mi, max 2Gi memory
 - 3 replicas for redundancy during VPA updates
 
