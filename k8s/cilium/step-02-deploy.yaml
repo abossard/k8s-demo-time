@@ -1,0 +1,182 @@
+# =============================================================================
+# Step 02: Deploy Demo App + Traffic Generator
+# =============================================================================
+# Creates:
+#   - Namespace: cilium-demo
+#   - Deployment: demo-app (2 replicas)
+#   - Service: demo-app (ClusterIP)
+#   - Service: demo-app-headless (headless for DNS pod discovery)
+#   - Pod: traffic-generator (curl pod for generating requests)
+#
+# Apply:  kubectl apply -f step-02-deploy.yaml
+# Verify: kubectl get all -n cilium-demo
+# =============================================================================
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cilium-demo
+  labels:
+    purpose: cilium-tutorial
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  namespace: cilium-demo
+  labels:
+    app: demo-app
+    tutorial-step: "02-deploy"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+    spec:
+      containers:
+        - name: demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
+            - name: HOLD_STARTUP_SECONDS
+              value: "2"
+            - name: SERVICE_NAME
+              value: "demo-app-headless"
+            - name: CLUSTER_NAME
+              value: "cilium-demo-cluster"
+            - name: CLUSTER_DOMAIN
+              value: "cluster.local"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app
+  namespace: cilium-demo
+  labels:
+    app: demo-app
+    tutorial-step: "02-deploy"
+spec:
+  type: ClusterIP
+  selector:
+    app: demo-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app-headless
+  namespace: cilium-demo
+  labels:
+    app: demo-app
+    tutorial-step: "02-deploy"
+spec:
+  clusterIP: None
+  selector:
+    app: demo-app
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: traffic-generator
+  namespace: cilium-demo
+  labels:
+    app: traffic-generator
+    role: client
+    tutorial-step: "02-deploy"
+spec:
+  containers:
+    - name: curl
+      image: curlimages/curl:latest
+      command: ["sleep", "infinity"]
+      resources:
+        requests:
+          cpu: 50m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi

@@ -1,0 +1,81 @@
+# =============================================================================
+# Step 05: CiliumNetworkPolicy — Cilium-Specific Features
+# =============================================================================
+# Demonstrates CiliumNetworkPolicy features beyond standard NetworkPolicy:
+#   - endpointSelector (identity-based, not IP-based)
+#   - DNS-aware egress rules (restrict which domains pods can resolve)
+#   - Cilium-specific label matching
+#
+# This REPLACES the Step 04 NetworkPolicy — delete it first:
+#   kubectl delete -f step-04-network-policy.yaml
+#
+# Apply:  kubectl apply -f step-05-l7-visibility.yaml
+# Delete: kubectl delete -f step-05-l7-visibility.yaml
+#
+# Prerequisites:
+#   - CiliumNetworkPolicy CRD must exist (comes with Cilium CNI)
+#   - Check: kubectl get crd ciliumnetworkpolicies.cilium.io
+#
+# NOTE on AKS:
+#   Azure CNI Powered by Cilium does NOT support HTTP L7 rules
+#   (method/path filtering). Those require self-managed Cilium OSS.
+#   DNS-based L7 rules ARE supported on AKS.
+# =============================================================================
+---
+# Ingress: only allow traffic from pods with role=frontend on port 8080
+# Same effect as the NetworkPolicy in step-04, but using Cilium-native syntax
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: demo-app-cilium-ingress
+  namespace: cilium-demo
+  labels:
+    tutorial-step: "05-cilium-policy"
+spec:
+  endpointSelector:
+    matchLabels:
+      app: demo-app
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            role: frontend
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+# Egress: restrict traffic-generator to only resolve *.cilium-demo DNS names
+# and only connect to demo-app pods on port 8080
+# This shows DNS-aware policy — a Cilium-specific feature
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: traffic-generator-egress
+  namespace: cilium-demo
+  labels:
+    tutorial-step: "05-cilium-policy"
+spec:
+  endpointSelector:
+    matchLabels:
+      app: traffic-generator
+  egress:
+    # Allow DNS queries to kube-dns, but only for *.cilium-demo domains
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+          rules:
+            dns:
+              - matchPattern: "*.cilium-demo.svc.cluster.local"
+    # Allow HTTP traffic to demo-app pods
+    - toEndpoints:
+        - matchLabels:
+            app: demo-app
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

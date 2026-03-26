@@ -1,0 +1,18 @@
+# =============================================================================
+# Step 07: Cleanup
+# =============================================================================
+# Deleting the namespace removes everything:
+#   - Deployment, Services, Pods
+#   - NetworkPolicies, CiliumNetworkPolicies
+#   - All resources created during the tutorial
+#
+# Apply: kubectl delete -f step-07-cleanup.yaml
+#   or:  kubectl delete namespace cilium-demo
+# =============================================================================
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cilium-demo
+  labels:
+    purpose: cilium-tutorial

@@ -1,0 +1,39 @@
+# =============================================================================
+# Step 04: Kubernetes Network Policy
+# =============================================================================
+# Creates a standard Kubernetes NetworkPolicy that:
+#   - Restricts ingress to demo-app pods
+#   - Only allows traffic from pods with label role=frontend
+#   - Only on port 8080
+#
+# Before applying: traffic-generator (role=client) CAN reach demo-app
+# After applying:  traffic-generator is BLOCKED (no role=frontend label)
+#
+# To unblock: kubectl label pod -n cilium-demo traffic-generator role=frontend
+# To re-block: kubectl label pod -n cilium-demo traffic-generator role-
+#
+# Apply:  kubectl apply -f step-04-network-policy.yaml
+# Delete: kubectl delete -f step-04-network-policy.yaml
+# =============================================================================
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: demo-app-ingress
+  namespace: cilium-demo
+  labels:
+    tutorial-step: "04-network-policy"
+spec:
+  podSelector:
+    matchLabels:
+      app: demo-app
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              role: frontend
+      ports:
+        - port: 8080
+          protocol: TCP
