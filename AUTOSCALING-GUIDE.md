@@ -1,333 +1,154 @@
-# Kubernetes Autoscaling and QoS Demonstrations
+# Kubernetes Demo Tutorials
 
-This repository contains comprehensive, step-by-step demonstrations of Kubernetes autoscaling (VPA and HPA) and Quality of Service (QoS) classes using a demo application.
+A hands-on tutorial collection for learning Kubernetes resource management, autoscaling, networking, and cost optimization using a purpose-built demo application.
 
-## Overview
+## Demo Application
 
-Learn how to:
-- **Vertically scale** pods with VPA (Vertical Pod Autoscaler)
-- **Horizontally scale** pods with HPA (Horizontal Pod Autoscaler)
-- **Prioritize evictions** under resource pressure using QoS classes
-- **Optimize bin packing** to reduce costs while understanding trade-offs
-- **Combine strategies** for optimal resource utilization
+**k8s-demo-app** is a .NET 9.0 Web API with built-in tools for exploring Kubernetes concepts:
+
+- **Stress endpoints** — Generate CPU and memory load to trigger autoscaling
+- **Probe management** — Toggle startup, readiness, and liveness probes live
+- **Chaos engineering** — Simulate crashes and request freezes
+- **Prometheus metrics** — `/metrics` endpoint for custom metric scaling (KEDA)
+- **QoS detection** — Displays the pod's current QoS class
+- **Live dashboard** — Real-time SSE-based status with per-pod color theming
+- **Broadcast coordination** — Coordinate actions across replicas via headless service DNS
+
+## Recommended Learning Path
+
+Follow these tutorials in order — each builds on concepts from the previous:
+
+| # | Tutorial | Focus | Duration |
+|---|----------|-------|----------|
+| 1 | **[Resource Management](k8s/resources/README.md)** | Requests, limits, CPU throttling, OOM kills | ~45 min |
+| 2 | **[Scaling Journey](k8s/scaling-journey/README.md)** | HPA → Custom Metrics → KEDA → VPA (unified) | ~2–3 hrs |
+| 3 | **[QoS Classes](k8s/qos/README.md)** | Guaranteed, Burstable, BestEffort, eviction priority | ~30 min |
+| 4 | **[VPA Deep Dive](k8s/vpa/README.md)** | Off → Initial → Recreate → InPlaceOrRecreate modes | ~45 min |
+| 5 | **[Bin Packing](k8s/bin-packing/README.md)** | Cost optimization vs stability trade-offs (7 iterations) | ~1 hr |
+| 6 | **[Cilium & Hubble](k8s/cilium/README.md)** | Network observability, DNS, L7 policies, eBPF | ~1 hr |
 
 ## Repository Structure
 
 ```
 k8s/
-├── hpa/                    # Horizontal Pod Autoscaler demonstrations
-│   ├── step-01-base-workload.yaml
-│   ├── step-02-hpa-cpu.yaml
-│   ├── step-03-hpa-cpu-memory.yaml
-│   ├── step-04-hpa-custom-metric.yaml
-│   ├── step-05-hpa-behavior.yaml
-│   └── step-06-cleanup.yaml
-│
-├── vpa/                    # Vertical Pod Autoscaler demonstrations
-│   ├── README.md          # Complete VPA tutorial
-│   ├── step-01-base-workload.yaml
-│   ├── step-02-vpa-off-mode.yaml
-│   ├── step-03-vpa-initial-mode.yaml
-│   ├── step-04-vpa-auto-mode.yaml
-│   ├── step-05-vpa-recreate-mode.yaml
-│   ├── step-06-vpa-tight-bounds.yaml
-│   └── step-07-cleanup.yaml
-│
-├── qos/                    # Quality of Service demonstrations
-│   ├── README.md          # Complete QoS tutorial
-│   ├── step-01-guaranteed-qos.yaml
-│   ├── step-02-burstable-qos.yaml
-│   ├── step-03-besteffort-qos.yaml
-│   ├── step-04-mixed-qos-eviction-demo.yaml
-│   ├── step-05-priority-classes.yaml
-│   └── step-06-cleanup.yaml
-│
-├── bin-packing/            # Bin packing and cost optimization
-│   ├── README.md          # Complete bin packing tutorial
-│   ├── step-01-static-vm-like.yaml
-│   ├── step-02-qos-aware.yaml
-│   ├── step-03-with-limits.yaml
-│   ├── step-04-with-hpa.yaml
-│   ├── step-05-with-vpa.yaml
-│   ├── step-06-mixed-qos.yaml
-│   ├── step-07-extreme-packing.yaml
-│   └── step-08-cleanup.yaml
-│
-└── combined/               # Combined demonstrations
-    ├── README.md          # How to combine VPA, HPA, and QoS
-    ├── step-01-hpa-with-guaranteed-qos.yaml
-    ├── step-02-vpa-with-burstable-qos.yaml
-    ├── step-03-complete-demo.yaml
-    └── step-04-cleanup.yaml
+├── resources/              # Foundation: requests, limits, resource lifecycle
+├── scaling-journey/        # Unified autoscaling: HPA → KEDA → VPA
+├── qos/                    # QoS classes and eviction priority
+├── vpa/                    # Vertical Pod Autoscaler deep dive
+├── bin-packing/            # Cost optimization strategies (7 steps)
+├── cilium/                 # Cilium CNI & Hubble network observability
+└── deployment.yaml         # Base deployment manifest
+
+src/K8sDemoApp/             # Demo application source
+infra/                      # Azure Bicep templates (AKS, ACR)
 ```
 
 ## Quick Start
 
-### Prerequisites
-
-- Kubernetes cluster (1.25+)
-- kubectl configured
-- Metrics server installed
-- VPA installed (for VPA demos)
-
-### 1. HPA Demonstrations (CPU-bound scaling)
-
 ```bash
-# Start with base workload
-kubectl apply -f k8s/hpa/step-01-base-workload.yaml
+# 1. Build and deploy the demo app
+cd src/K8sDemoApp && dotnet build && cd ../..
+docker build --platform linux/amd64 -t k8s-demo-app:local .
 
-# Apply CPU-based HPA
-kubectl apply -f k8s/hpa/step-02-hpa-cpu.yaml
+# 2. Start with Resource Management fundamentals
+kubectl apply -f k8s/resources/step-01-no-resources.yaml
 
-# Generate load and watch scaling
-kubectl port-forward svc/k8s-demo-app 8080:80 -n hpa-demo
-curl -X POST http://localhost:8080/api/stress/cpu \
-  -H "Content-Type: application/json" \
-  -d '{"minutes": 5, "threads": 8}'
-
-# Watch HPA in action
-kubectl get hpa k8s-demo-app -w -n hpa-demo
+# 3. Access the dashboard
+kubectl port-forward svc/k8s-demo-app 8080:80 -n resources-demo
+open http://localhost:8080
 ```
 
-### 2. VPA Demonstrations (Request optimization)
+## Feature Comparison
 
-```bash
-# Deploy base workload with low requests
-kubectl apply -f k8s/vpa/step-01-base-workload.yaml
+### HPA vs VPA vs KEDA
 
-# Enable VPA in "Off" mode (recommendations only)
-kubectl apply -f k8s/vpa/step-02-vpa-off-mode.yaml
-
-# Check recommendations
-kubectl describe vpa k8s-demo-app-vpa -n vpa-demo
-
-# Enable auto mode for live updates
-kubectl apply -f k8s/vpa/step-04-vpa-auto-mode.yaml
-```
-
-### 3. QoS Demonstrations (Eviction priority)
-
-```bash
-# Deploy all three QoS classes
-kubectl apply -f k8s/qos/step-04-mixed-qos-eviction-demo.yaml
-
-# View QoS classes
-kubectl get pods -n qos-demo -o custom-columns=\
-NAME:.metadata.name,\
-QOS:.status.qosClass
-
-# Generate memory pressure and watch evictions
-kubectl get pods -n qos-demo -w
-```
-
-### 4. Bin Packing Tutorial (Cost vs. Stability)
-
-```bash
-# Start with static VM-like deployment
-kubectl apply -f k8s/bin-packing/step-01-static-vm-like.yaml
-
-# Progress through optimization steps
-kubectl apply -f k8s/bin-packing/step-02-qos-aware.yaml
-kubectl apply -f k8s/bin-packing/step-04-with-hpa.yaml
-
-# Watch node utilization improve
-kubectl top nodes
-
-# Try extreme packing (demonstration only!)
-kubectl apply -f k8s/bin-packing/step-07-extreme-packing.yaml
-
-# Generate load and observe the "card house collapse"
-kubectl port-forward svc/frontend -n bin-packing-demo 8080:80
-curl -X POST http://localhost:8080/api/stress/cpu \
-  -H "Content-Type: application/json" \
-  -d '{"minutes": 10, "threads": 16, "broadcastToAll": true}'
-
-# Watch the cascade of failures
-kubectl get events -n bin-packing-demo --sort-by='.lastTimestamp' -w
-```
-
-### 5. Combined Demo (Everything together)
-
-```bash
-# Deploy complete demonstration
-kubectl apply -f k8s/combined/step-03-complete-demo.yaml
-
-# View all resources
-kubectl get all,hpa,vpa -n autoscaling-demo
-```
-
-## Feature Comparisons
-
-### HPA vs VPA
-
-| Feature | HPA | VPA |
-|---------|-----|-----|
-| **Scaling Direction** | Horizontal (replicas) | Vertical (resources) |
-| **Triggers** | CPU, Memory, Custom metrics | Historical usage patterns |
-| **Pod Impact** | No pod restart | Pod restart (Auto/Recreate mode) |
-| **Response Time** | Fast (seconds to minutes) | Slower (hours to days for accuracy) |
-| **Best For** | CPU-bound, stateless apps | Memory-bound, stateful apps |
-| **Conflicts** | Don't use both for same resource | Don't use both for same resource |
+| Feature | HPA | VPA | KEDA |
+|---------|-----|-----|------|
+| **Scaling Direction** | Horizontal (replicas) | Vertical (resources) | Horizontal (replicas) |
+| **Triggers** | CPU, memory | Historical usage | Any event source (Prometheus, queues, HTTP, cron, …) |
+| **Pod Impact** | No restart | Pod restart (Recreate mode) | No restart |
+| **Response Time** | Seconds–minutes | Hours–days for accuracy | Seconds–minutes |
+| **Scale to Zero** | No (min 1) | N/A | ✅ Yes |
+| **Best For** | CPU-bound stateless apps | Right-sizing, memory-bound | Event-driven, queue-based |
+| **Conflicts** | Don't overlap with VPA on same metric | Don't overlap with HPA on same metric | Manages HPA; same VPA rules apply |
 
 ### QoS Classes
 
-| Class | Criteria | Priority | Eviction Order | Use Case |
-|-------|----------|----------|----------------|----------|
-| **Guaranteed** | requests == limits | Highest | Last | Critical services, databases |
-| **Burstable** | requests < limits | Medium | Second | Standard applications |
-| **BestEffort** | No requests/limits | Lowest | First | Batch jobs, dev workloads |
+| Class | Criteria | Eviction Order | Use Case |
+|-------|----------|----------------|----------|
+| **Guaranteed** | requests == limits | Last (highest priority) | Critical services, databases |
+| **Burstable** | requests < limits | Second | Standard applications |
+| **BestEffort** | No requests/limits | First (lowest priority) | Batch jobs, dev workloads |
 
-## Common Patterns
+## Prerequisites
 
-### Pattern 1: Critical Frontend Service
-
-```yaml
-# Guaranteed QoS + HPA for CPU scaling
-resources:
-  requests: {cpu: 500m, memory: 512Mi}
-  limits: {cpu: 500m, memory: 512Mi}
-
-hpa:
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilization: 60%
-```
-
-**Use Case:** API gateways, web servers, user-facing services
-
-### Pattern 2: Memory-Intensive Backend
-
-```yaml
-# Burstable QoS + VPA for memory optimization
-resources:
-  requests: {cpu: 200m, memory: 256Mi}
-  limits: {cpu: 1, memory: 2Gi}
-
-vpa:
-  updateMode: Auto
-  controlledResources: [memory]
-```
-
-**Use Case:** Data processors, caching layers, analytics services
-
-### Pattern 3: Batch Processing
-
-```yaml
-# BestEffort QoS, no autoscaling
-resources: {}
-priorityClassName: low-priority
-```
-
-**Use Case:** ETL jobs, report generation, background tasks
-
-## Tutorials
-
-Each directory contains a complete tutorial with step-by-step instructions:
-
-- **[HPA Tutorial](HPA-Interactive-Tutorial.md)** - Horizontal scaling with CPU, memory, and custom metrics
-- **[VPA Tutorial](k8s/vpa/README.md)** - Vertical scaling with different update modes
-- **[QoS Tutorial](k8s/qos/README.md)** - Understanding eviction priorities
-- **[Combined Demo](k8s/combined/README.md)** - Using VPA, HPA, and QoS together
-
-## Demo Application
-
-The k8s-demo-app provides built-in stress testing:
-
-```bash
-# CPU stress (triggers HPA)
-curl -X POST http://localhost:8080/api/stress/cpu \
-  -H "Content-Type: application/json" \
-  -d '{"minutes": 5, "threads": 8}'
-
-# Memory stress (triggers VPA recommendations or evictions)
-curl -X POST http://localhost:8080/api/stress/memory \
-  -H "Content-Type: application/json" \
-  -d '{"minutes": 5, "targetMegabytes": 600}'
-
-# Check status
-curl http://localhost:8080/api/status
-```
+- **Kubernetes cluster** 1.25+ (AKS recommended — see `infra/`)
+- **kubectl** configured for your cluster
+- **Metrics Server** installed (`kubectl top nodes` should work)
+- **Helm 3** (for Prometheus/KEDA in scaling-journey)
+- **VPA** installed (for VPA and bin-packing tutorials)
+- **KEDA** enabled as AKS managed addon (for scaling-journey KEDA steps)
+- **Cilium CNI** with Hubble (for cilium tutorial — default on AKS)
 
 ## Best Practices
 
 ### ✅ Do
 
+- Always set resource requests — the scheduler needs them
 - Use HPA for CPU-bound, stateless workloads
-- Use VPA for memory-bound workloads or right-sizing
+- Use VPA for right-sizing and memory-bound workloads
+- Use KEDA for event-driven and queue-based scaling
 - Match QoS class to workload criticality
 - Set PodDisruptionBudgets for critical services
-- Monitor autoscaling metrics regularly
-- Start with "Off" mode VPA to get recommendations
-- Use resource limits to prevent runaway consumption
+- Start with VPA "Off" mode to collect recommendations before enabling auto-updates
+- Use Prometheus metrics for scaling decisions beyond CPU/memory
 
 ### ❌ Don't
 
-- Use VPA + HPA on the same resource (CPU or memory)
-- Run VPA in "Auto" mode without testing first
-- Use BestEffort QoS for production critical services
-- Set resource limits too low (causes throttling/OOM)
-- Ignore VPA recommendations for extended periods
+- Use VPA + HPA on the **same metric** (CPU or memory)
+- Run VPA in auto-update mode without testing in Off mode first
+- Use BestEffort QoS for production-critical services
+- Set resource limits too low (causes CPU throttling / OOM kills)
+- Ignore VPA recommendations — they drift over time
 - Scale too aggressively (set appropriate stabilization windows)
+- Skip resource requests — pods become BestEffort and get evicted first
 
 ## Troubleshooting
 
 ### HPA Not Scaling
 
 1. Check metrics server: `kubectl get pods -n kube-system -l k8s-app=metrics-server`
-2. Verify resource requests are set
-3. Check current metrics: `kubectl describe hpa k8s-demo-app -n hpa-demo`
+2. Verify resource **requests** are set (HPA needs them for percentage calculation)
+3. Inspect HPA status: `kubectl describe hpa <name> -n <namespace>`
+4. Check for `ScalingLimited` or `FailedGetResourceMetric` conditions
+
+### KEDA Not Scaling
+
+1. Verify KEDA operator is running: `kubectl get pods -n kube-system -l app=keda-operator`
+2. Check ScaledObject status: `kubectl describe scaledobject <name> -n <namespace>`
+3. Confirm Prometheus is reachable from the KEDA metrics server
+4. Check trigger query returns data: test the PromQL query manually
 
 ### VPA Not Updating
 
-1. Verify VPA is installed: `kubectl get crd | grep verticalpodautoscaler`
-2. Check updateMode is not "Off"
-3. Ensure no conflicting HPA on same resource
+1. Verify VPA CRDs: `kubectl get crd | grep verticalpodautoscaler`
+2. Check updateMode is not "Off" (Off = recommendations only)
+3. Ensure no conflicting HPA targeting the same resource
+4. Review recommendations: `kubectl describe vpa <name> -n <namespace>`
 
 ### Unexpected Evictions
 
-1. Check node conditions: `kubectl describe nodes | grep Pressure`
-2. View eviction events: `kubectl get events --field-selector reason=Evicted -n qos-demo`
-3. Review resource usage: `kubectl top nodes` and `kubectl top pods -n qos-demo`
-
-## Monitoring
-
-Key metrics to track:
-
-```bash
-# Autoscaler status
-kubectl get hpa -n hpa-demo
-kubectl get vpa -n vpa-demo
-kubectl get hpa,vpa -n autoscaling-demo  # for combined demos
-
-# Resource usage
-kubectl top nodes
-kubectl top pods -n hpa-demo
-kubectl top pods -n qos-demo
-kubectl top pods -n vpa-demo
-
-# Events
-kubectl get events -n hpa-demo --sort-by='.lastTimestamp'
-kubectl get events -n qos-demo --sort-by='.lastTimestamp'
-kubectl get events -n vpa-demo --sort-by='.lastTimestamp'
-
-# QoS distribution
-kubectl get pods -n qos-demo -o custom-columns=\
-NAME:.metadata.name,\
-QOS:.status.qosClass
-```
+1. Check node pressure: `kubectl describe nodes | grep -A5 Conditions`
+2. View eviction events: `kubectl get events --field-selector reason=Evicted`
+3. Review resource usage: `kubectl top nodes && kubectl top pods -A`
+4. Check QoS classes: pods without requests/limits are evicted first
 
 ## Additional Resources
 
 - [Kubernetes HPA Documentation](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
 - [Kubernetes VPA GitHub](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler)
+- [KEDA Documentation](https://keda.sh/docs/)
 - [QoS Classes Documentation](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/)
 - [Resource Management](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)
-- [Pod Priority and Preemption](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/)
-
-## Contributing
-
-These demonstrations are part of the k8s-demo-time repository. Contributions and improvements are welcome!
-
-## License
-
-See the main repository LICENSE file.
+- [Cilium Documentation](https://docs.cilium.io/)
+- [Hubble Observability](https://docs.cilium.io/en/stable/observability/)

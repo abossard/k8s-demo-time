@@ -1,0 +1,15 @@
+##############################################################################
+# Step 8: Cleanup — Remove all tutorial resources
+# Run: kubectl delete -f k8s/scaling-journey/step-08-cleanup.yaml
+# Or simply: kubectl delete namespace scaling-demo
+##############################################################################
+
+# Deleting the namespace removes all resources within it.
+# This file exists so `kubectl delete -f` works for consistency with other steps.
+# Note: KEDA (installed cluster-wide) is not removed by this — see README.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scaling-demo
+  labels:
+    tutorial: scaling-journey

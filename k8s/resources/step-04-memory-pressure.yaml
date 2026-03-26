@@ -1,0 +1,164 @@
+# =============================================================================
+# Step 4: Memory Pressure and OOMKill — When Limits Fight Back
+# =============================================================================
+# Deploy a pod with a tight memory limit, then stress it beyond the limit.
+# Watch the kernel OOM killer terminate the process (exit code 137).
+#
+# After applying:
+#   kubectl port-forward svc/demo-app-tight 8080:80 -n resources-demo
+#
+# Trigger OOMKill:
+#   curl -X POST http://localhost:8080/api/stress/memory \
+#     -H "Content-Type: application/json" \
+#     -d '{"minutes": 2, "targetMegabytes": 200}'
+#
+# Watch it die:
+#   kubectl get pods -n resources-demo -w
+#   kubectl describe pod -l app=demo-app-tight -n resources-demo | grep -A 5 "Last State"
+#   kubectl get events -n resources-demo --field-selector reason=OOMKilling
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app-tight
+  namespace: resources-demo
+  labels:
+    app: demo-app-tight
+    qos-class: burstable
+    tutorial-step: "04-memory-pressure"
+  annotations:
+    tutorial.k8s-demo/lesson: "Memory limit = hard ceiling enforced by the kernel OOM killer"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-app-tight
+  template:
+    metadata:
+      labels:
+        app: demo-app-tight
+        qos-class: burstable
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: SERVICE_NAME
+              value: "demo-app-tight-headless"
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.memory
+          ports:
+            - name: http
+              containerPort: 8080
+          # Tight memory: 64Mi request, 128Mi limit
+          # The app idles at ~50-80Mi, so it starts fine
+          # But stress to 200Mi will exceed the 128Mi limit → OOMKilled
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "128Mi"
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app-tight
+  namespace: resources-demo
+  labels:
+    app: demo-app-tight
+spec:
+  selector:
+    app: demo-app-tight
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app-tight-headless
+  namespace: resources-demo
+  labels:
+    app: demo-app-tight
+spec:
+  clusterIP: None
+  selector:
+    app: demo-app-tight
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

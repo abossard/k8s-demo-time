@@ -1,32 +1,44 @@
+# =============================================================================
+# Step 1: Deploy and Observe — See Resources in Action
+# =============================================================================
+# Deploy a standard Burstable QoS workload and learn to read resource info.
+#
+# After applying:
+#   kubectl get pods -n resources-demo -o wide
+#   kubectl top pods -n resources-demo
+#   kubectl top nodes
+#   kubectl describe node <node> | grep -A 20 "Allocated resources"
+#
+# Open the dashboard to see the QoS badge and resource info:
+#   kubectl port-forward svc/demo-app 8080:80 -n resources-demo
+#   open http://localhost:8080
+# =============================================================================
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: autoscaling-demo
+  name: resources-demo
   labels:
-    purpose: demo
-    feature: autoscaling
+    tutorial.k8s-demo/component: resources
 ---
-# Deployment with Guaranteed QoS and HPA
-# This demonstrates CPU-based horizontal scaling with guaranteed resources
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend-guaranteed
-  namespace: autoscaling-demo
+  name: demo-app
+  namespace: resources-demo
   labels:
-    app: frontend
-    tier: guaranteed
+    app: demo-app
+    qos-class: burstable
+    tutorial-step: "01-observe"
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: frontend
-      tier: guaranteed
+      app: demo-app
   template:
     metadata:
       labels:
-        app: frontend
-        tier: guaranteed
+        app: demo-app
+        qos-class: burstable
     spec:
       containers:
         - name: k8s-demo-app
@@ -34,7 +46,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: ASPNETCORE_URLS
-              value: http://+:8080
+              value: "http://+:8080"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -43,8 +55,32 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
             - name: SERVICE_NAME
-              value: "k8s-demo-app-headless"
+              value: "demo-app-headless"
+            - name: CLUSTER_NAME
+              value: "demo-cluster"
+            - name: CLUSTER_DOMAIN
+              value: "cluster.local"
             - name: RESOURCE_REQUEST_CPU
               valueFrom:
                 resourceFieldRef:
@@ -70,11 +106,11 @@ spec:
               containerPort: 8080
           resources:
             requests:
-              cpu: "250m"
+              cpu: "200m"
               memory: "256Mi"
             limits:
-              cpu: "250m"
-              memory: "256Mi"
+              cpu: "500m"
+              memory: "512Mi"
           startupProbe:
             httpGet:
               path: /health/startup
@@ -86,80 +122,44 @@ spec:
               path: /health/readiness
               port: http
             periodSeconds: 5
+            failureThreshold: 2
+            successThreshold: 1
+            timeoutSeconds: 2
           livenessProbe:
             httpGet:
               path: /health/liveness
               port: http
             periodSeconds: 10
----
-# HPA for CPU-based horizontal scaling
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: frontend-guaranteed-hpa
-  namespace: autoscaling-demo
-  labels:
-    app: frontend
-  annotations:
-    demo.k8s/description: "HPA scales horizontally based on CPU utilization"
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: frontend-guaranteed
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 60
-  behavior:
-    scaleUp:
-      stabilizationWindowSeconds: 30
-      policies:
-        - type: Percent
-          value: 100
-          periodSeconds: 30
-        - type: Pods
-          value: 2
-          periodSeconds: 30
-    scaleDown:
-      stabilizationWindowSeconds: 120
-      policies:
-        - type: Percent
-          value: 50
-          periodSeconds: 60
+            failureThreshold: 3
+            timeoutSeconds: 2
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: frontend-guaranteed
-  namespace: autoscaling-demo
+  name: demo-app
+  namespace: resources-demo
+  labels:
+    app: demo-app
 spec:
   selector:
-    app: frontend
-    tier: guaranteed
+    app: demo-app
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: http
-  type: ClusterIP
+  type: LoadBalancer
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: k8s-demo-app-headless
-  namespace: autoscaling-demo
+  name: demo-app-headless
+  namespace: resources-demo
   labels:
-    app: frontend
-    tier: guaranteed
+    app: demo-app
 spec:
   clusterIP: None
   selector:
-    app: frontend
-    tier: guaranteed
+    app: demo-app
   ports:
     - name: http
       port: 8080

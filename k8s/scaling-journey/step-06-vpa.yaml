@@ -1,0 +1,33 @@
+##############################################################################
+# Step 6: VPA — Vertical Pod Autoscaler in Off mode (recommendation only)
+# Observes pod resource usage and provides sizing recommendations.
+# Start in Off mode for zero-risk observation, then switch to Recreate.
+##############################################################################
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: demo-app-vpa
+  namespace: scaling-demo
+  labels:
+    app: demo-app
+    tutorial: scaling-journey
+    step: "06-vpa"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: demo-app
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: demo-app
+        minAllowed:
+          cpu: 50m
+          memory: 64Mi
+        maxAllowed:
+          cpu: "2"
+          memory: 1Gi
+        controlledResources:
+          - cpu
+          - memory

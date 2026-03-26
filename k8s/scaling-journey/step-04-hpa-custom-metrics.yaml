@@ -1,0 +1,124 @@
+##############################################################################
+# Step 4: HPA with Custom Metrics (placeholder)
+# This manifest updates the Deployment with Prometheus annotations and
+# documents the HPA configuration that would use custom metrics.
+#
+# In practice, custom metrics via Prometheus Adapter requires additional
+# cluster components. Step 5 (KEDA) achieves the same goal more simply.
+##############################################################################
+# Re-apply the Deployment to ensure Prometheus scrape annotations are present
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  namespace: scaling-demo
+  labels:
+    app: demo-app
+    tutorial: scaling-journey
+    step: "04-custom-metrics"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: demo-app
+                  resource: limits.memory
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+---
+# Example HPA using custom metrics (requires Prometheus Adapter installed)
+# This is provided for reference — Step 5 achieves the same with KEDA.
+#
+# apiVersion: autoscaling/v2
+# kind: HorizontalPodAutoscaler
+# metadata:
+#   name: demo-app
+#   namespace: scaling-demo
+# spec:
+#   scaleTargetRef:
+#     apiVersion: apps/v1
+#     kind: Deployment
+#     name: demo-app
+#   minReplicas: 1
+#   maxReplicas: 6
+#   metrics:
+#     - type: Pods
+#       pods:
+#         metric:
+#           name: http_server_active_requests
+#         target:
+#           type: AverageValue
+#           averageValue: "10"

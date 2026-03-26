@@ -1,36 +1,90 @@
+# =============================================================================
+# Step 5: Resource Quotas and LimitRanges — Namespace-Level Governance
+# =============================================================================
+# Protect your cluster from greedy workloads with quotas and default limits.
+#
+# After applying:
+#   kubectl describe resourcequota resource-budget -n resources-demo
+#   kubectl describe limitrange default-limits -n resources-demo
+#
+# Try to exceed them:
+#   kubectl scale deployment demo-app-quota-test --replicas=8 -n resources-demo
+#   kubectl get events -n resources-demo --field-selector reason=FailedCreate
+#
+# Watch quota usage:
+#   kubectl get resourcequota resource-budget -n resources-demo -o yaml
+# =============================================================================
+
+# --- ResourceQuota: Cap the total resources the namespace can consume ---
 apiVersion: v1
-kind: Namespace
+kind: ResourceQuota
 metadata:
-  name: hpa-demo
+  name: resource-budget
+  namespace: resources-demo
   labels:
-    tutorial.k8s-demo/component: hpa
+    tutorial-step: "05-quotas"
+  annotations:
+    tutorial.k8s-demo/lesson: "Quotas cap the total resource consumption for a namespace"
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: "2Gi"
+    limits.cpu: "4"
+    limits.memory: "4Gi"
+    pods: "6"
 ---
+# --- LimitRange: Set defaults and caps for individual containers ---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: resources-demo
+  labels:
+    tutorial-step: "05-quotas"
+  annotations:
+    tutorial.k8s-demo/lesson: "LimitRanges set defaults and caps per container"
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "200m"
+        memory: "256Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      max:
+        cpu: "1"
+        memory: "1Gi"
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+---
+# --- Test deployment: try to create 3 replicas within quota ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: k8s-demo-app
-  namespace: hpa-demo
+  name: demo-app-quota-test
+  namespace: resources-demo
   labels:
-    app: k8s-demo-app
+    app: demo-app-quota-test
+    tutorial-step: "05-quotas"
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
-      app: k8s-demo-app
+      app: demo-app-quota-test
   template:
     metadata:
       labels:
-        app: k8s-demo-app
+        app: demo-app-quota-test
     spec:
       containers:
         - name: k8s-demo-app
-          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest # replace with $REGISTRY_LOGIN_SERVER/k8s-demo-app:<tag>
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: ASPNETCORE_URLS
-              value: http://+:8080
-            - name: HOLD_STARTUP_SECONDS
-              value: "5"
+              value: "http://+:8080"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -39,8 +93,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: SERVICE_NAME
-              value: "k8s-demo-app-headless"
             - name: POD_UID
               valueFrom:
                 fieldRef:
@@ -61,10 +113,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
-            - name: CLUSTER_NAME
-              value: demo-cluster
-            - name: CLUSTER_DOMAIN
-              value: cluster.local
+            - name: SERVICE_NAME
+              value: "demo-app-headless"
             - name: RESOURCE_REQUEST_CPU
               valueFrom:
                 resourceFieldRef:
@@ -88,13 +138,14 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          # Moderate resources — 3 replicas × 200m/256Mi = 600m/768Mi (within quota)
           resources:
             requests:
               cpu: "200m"
               memory: "256Mi"
             limits:
-              cpu: "1"
-              memory: "1Gi"
+              cpu: "500m"
+              memory: "512Mi"
           startupProbe:
             httpGet:
               path: /health/startup
@@ -116,35 +167,3 @@ spec:
             periodSeconds: 10
             failureThreshold: 3
             timeoutSeconds: 2
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: k8s-demo-app
-  namespace: hpa-demo
-  labels:
-    app: k8s-demo-app
-spec:
-  selector:
-    app: k8s-demo-app
-  ports:
-    - name: http
-      port: 80
-      targetPort: http
-  type: LoadBalancer
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: k8s-demo-app-headless
-  namespace: hpa-demo
-  labels:
-    app: k8s-demo-app
-spec:
-  clusterIP: None
-  selector:
-    app: k8s-demo-app
-  ports:
-    - name: http
-      port: 8080
-      targetPort: http

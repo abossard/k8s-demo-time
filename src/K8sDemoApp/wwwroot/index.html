@@ -1098,10 +1098,12 @@
             throw new Error('Threads must be a positive integer.');
           }
           const broadcastToAll = document.getElementById('cpu-broadcast').checked;
-          await postJson('/api/stress/cpu', { minutes, threads, broadcastToAll });
+          const rampSeconds = parseInt(document.getElementById('cpu-ramp-seconds').value, 10) || 0;
+          await postJson('/api/stress/cpu', { minutes, threads, rampSeconds, broadcastToAll });
           const target = broadcastToAll ? 'all replicas' : 'this pod';
-          setNotification(`CPU stress scheduled on ${target} for ${minutes} minute(s) with ${threads} thread(s).`);
-          logEvent('warn', 'CPU stress scheduled', { minutes, threads, broadcastToAll });
+          const rampInfo = rampSeconds > 0 ? ` (ramp: ${rampSeconds}s)` : '';
+          setNotification(`CPU stress scheduled on ${target} for ${minutes} minute(s) with ${threads} thread(s)${rampInfo}.`);
+          logEvent('warn', 'CPU stress scheduled', { minutes, threads, rampSeconds, broadcastToAll });
         } catch (error) {
           setNotification(error.message, true);
         }

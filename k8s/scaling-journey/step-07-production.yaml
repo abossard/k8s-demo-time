@@ -1,0 +1,211 @@
+##############################################################################
+# Step 7: Production — Full autoscaling stack
+# Combines VPA (Recreate), KEDA (Prometheus trigger), and PDB.
+# This is the capstone: a production-ready autoscaling configuration.
+#
+# Prerequisites: KEDA installed, VPA controller installed, Prometheus running.
+# Important: Clean up resources from previous steps before applying.
+##############################################################################
+
+# Deployment with Prometheus annotations and realistic resource requests
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  namespace: scaling-demo
+  labels:
+    app: demo-app
+    tutorial: scaling-journey
+    step: "07-production"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: demo-app
+          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: demo-app
+                  resource: limits.memory
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app
+  namespace: scaling-demo
+  labels:
+    app: demo-app
+    tutorial: scaling-journey
+spec:
+  type: ClusterIP
+  selector:
+    app: demo-app
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+---
+# VPA in Recreate mode — automatically right-sizes pods
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: demo-app-vpa
+  namespace: scaling-demo
+  labels:
+    app: demo-app
+    tutorial: scaling-journey
+    step: "07-production"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: demo-app
+  updatePolicy:
+    updateMode: "Recreate"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: demo-app
+        minAllowed:
+          cpu: 100m
+          memory: 128Mi
+        maxAllowed:
+          cpu: "2"
+          memory: 1Gi
+        controlledResources:
+          - cpu
+          - memory
+---
+# KEDA ScaledObject — event-driven horizontal scaling via Prometheus
+# Uses http_server_active_requests (NOT CPU) to avoid VPA conflicts.
+# minReplicaCount: 1 for user-facing services (no scale-to-zero).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: demo-app-scaledobject
+  namespace: scaling-demo
+  labels:
+    app: demo-app
+    tutorial: scaling-journey
+    step: "07-production"
+spec:
+  scaleTargetRef:
+    name: demo-app
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  pollingInterval: 15
+  cooldownPeriod: 300
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 30
+          policies:
+            - type: Pods
+              value: 2
+              periodSeconds: 60
+            - type: Percent
+              value: 100
+              periodSeconds: 60
+          selectPolicy: Max
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://opencost-prometheus-server.opencost.svc.cluster.local:80
+        query: sum(http_server_active_requests{namespace="scaling-demo"})
+        threshold: "10"
+        activationThreshold: "1"
+---
+# PodDisruptionBudget — ensures at least 1 pod during VPA evictions
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: demo-app
+  namespace: scaling-demo
+  labels:
+    app: demo-app
+    tutorial: scaling-journey
+    step: "07-production"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: demo-app

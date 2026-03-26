@@ -1,26 +1,25 @@
+##############################################################################
+# Step 1: Baseline — Single pod, no autoscaling
+# Deploy this first to establish resource usage baseline before scaling.
+##############################################################################
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: deployment-strategy-demo
+  name: scaling-demo
   labels:
-    tutorial.k8s-demo/component: deployment-strategy
+    tutorial: scaling-journey
 ---
-# Aggressive Rolling Update Strategy Demo
-# Smaller resource requests/limits with fast, aggressive rollout
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: demo-app
-  namespace: deployment-strategy-demo
+  namespace: scaling-demo
   labels:
     app: demo-app
-    tier: application
-    tutorial-step: "aggressive-rollout"
+    tutorial: scaling-journey
+    step: "01-baseline"
 spec:
-  replicas: 6
-  minReadySeconds: 10
-  strategy:
-    type: Recreate
+  replicas: 1
   selector:
     matchLabels:
       app: demo-app
@@ -28,16 +27,25 @@ spec:
     metadata:
       labels:
         app: demo-app
-        tier: application
-        color: white
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
-        - name: k8s-demo-app
+        - name: demo-app
           image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
-          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
           env:
-            - name: ASPNETCORE_URLS
-              value: http://+:8080
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -46,40 +54,34 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: SERVICE_NAME
-              value: "demo-app-headless"
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
             - name: RESOURCE_REQUEST_CPU
               valueFrom:
                 resourceFieldRef:
-                  containerName: k8s-demo-app
+                  containerName: demo-app
                   resource: requests.cpu
             - name: RESOURCE_REQUEST_MEMORY
               valueFrom:
                 resourceFieldRef:
-                  containerName: k8s-demo-app
+                  containerName: demo-app
                   resource: requests.memory
             - name: RESOURCE_LIMIT_CPU
               valueFrom:
                 resourceFieldRef:
-                  containerName: k8s-demo-app
+                  containerName: demo-app
                   resource: limits.cpu
             - name: RESOURCE_LIMIT_MEMORY
               valueFrom:
                 resourceFieldRef:
-                  containerName: k8s-demo-app
+                  containerName: demo-app
                   resource: limits.memory
-          ports:
-            - name: http
-              containerPort: 8080
-          # Smaller requests/limits (~1/3 of VM-like approach)
-          # Guaranteed QoS: requests == limits
-          resources:
-            requests:
-              cpu: "150m"        # ~10% of node capacity
-              memory: "256Mi"    # ~9% of node capacity
-            limits:
-              cpu: "150m"        # Same as request = Guaranteed
-              memory: "256Mi"    # Same as request = Guaranteed
           startupProbe:
             httpGet:
               path: /health/startup
@@ -92,46 +94,27 @@ spec:
               port: http
             periodSeconds: 5
             failureThreshold: 2
-            successThreshold: 1
-            timeoutSeconds: 2
           livenessProbe:
             httpGet:
               path: /health/liveness
               port: http
             periodSeconds: 10
             failureThreshold: 3
-            timeoutSeconds: 2
 ---
-# LoadBalancer Service
 apiVersion: v1
 kind: Service
 metadata:
   name: demo-app
-  namespace: deployment-strategy-demo
+  namespace: scaling-demo
   labels:
     app: demo-app
+    tutorial: scaling-journey
 spec:
+  type: ClusterIP
   selector:
     app: demo-app
   ports:
-    - name: http
-      port: 80
+    - port: 80
       targetPort: http
-  type: LoadBalancer
----
-# Headless Service for DNS resolution
-apiVersion: v1
-kind: Service
-metadata:
-  name: demo-app-headless
-  namespace: deployment-strategy-demo
-  labels:
-    app: demo-app
-spec:
-  clusterIP: None
-  selector:
-    app: demo-app
-  ports:
-    - name: http
-      port: 8080
-      targetPort: http
+      protocol: TCP
+      name: http

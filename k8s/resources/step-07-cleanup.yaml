@@ -1,0 +1,18 @@
+# =============================================================================
+# Step 7: Cleanup — Remove All Tutorial Resources
+# =============================================================================
+# Deleting the namespace removes everything inside it:
+# deployments, services, quotas, limit ranges, pods, etc.
+#
+# Usage:
+#   kubectl delete -f k8s/resources/step-07-cleanup.yaml
+#
+# Or simply:
+#   kubectl delete namespace resources-demo
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: resources-demo
+  labels:
+    tutorial.k8s-demo/component: resources
