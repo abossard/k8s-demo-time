@@ -95,7 +95,7 @@ spec:
     kind: Deployment
     name: k8s-demo-app-vpa
   updatePolicy:
-    updateMode: "Auto"
+    updateMode: "Recreate"
   resourcePolicy:
     containerPolicies:
       - containerName: k8s-demo-app

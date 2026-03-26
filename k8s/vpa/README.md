@@ -17,7 +17,10 @@ VPA supports different update modes that control how recommendations are applied
 
 1. **Off** - Only provides recommendations without making changes
 2. **Initial** - Sets resources at pod creation time only
-3. **Auto/Recreate** - Automatically updates resources by recreating pods
+3. **Recreate** - Automatically updates resources by evicting and recreating pods
+4. **InPlaceOrRecreate** - Tries in-place resource updates first, falls back to recreation
+
+> **Note:** The `Auto` mode is deprecated and will be removed in a future API version. Use `Recreate` or `InPlaceOrRecreate` instead. See [kubernetes/autoscaler#8424](https://github.com/kubernetes/autoscaler/issues/8424) for details.
 
 ## Lab Flow
 
@@ -25,8 +28,8 @@ VPA supports different update modes that control how recommendations are applied
 flowchart TD
     A["1️⃣ Deploy Base Workload<br/>- Low resource requests<br/>- Monitor initial usage"] --> B["2️⃣ VPA Off Mode<br/>- Get recommendations<br/>- No pod changes"]
     B --> C["3️⃣ VPA Initial Mode<br/>- Apply on new pods<br/>- Existing pods unchanged"]
-    C --> D["4️⃣ VPA Auto Mode<br/>- Automatic updates<br/>- Pod recreation"]
-    D --> E["5️⃣ VPA Recreate Mode<br/>- Explicit recreation<br/>- Same as Auto"]
+    C --> D["4️⃣ VPA Auto Mode ⚠️<br/>- Automatic updates<br/>- Pod recreation<br/>- (Deprecated)"]
+    D --> E["5️⃣ VPA Recreate Mode<br/>- Replaces Auto<br/>- Pod recreation"]
     E --> F["6️⃣ Tight Bounds<br/>- Min/max constraints<br/>- Observe limits"]
     F --> G["7️⃣ Cleanup<br/>- Remove resources"]
 ```
@@ -94,7 +97,9 @@ kubectl delete pod <pod-name> -n vpa-demo
 kubectl describe pod <new-pod-name> -n vpa-demo | grep -A 5 "Requests:"
 ```
 
-### 4. VPA in "Auto" Mode (20 min)
+### 4. VPA in "Auto" Mode (Deprecated) (20 min)
+
+> **⚠️ Deprecation Notice:** The `Auto` mode is deprecated. This step is included for reference, but new deployments should use `Recreate` or `InPlaceOrRecreate` mode instead.
 
 Enable automatic updates with "Auto" mode:
 
@@ -120,7 +125,7 @@ kubectl get pods -n vpa-demo -l app=k8s-demo-app-vpa -w
 
 ### 5. VPA in "Recreate" Mode (10 min)
 
-"Recreate" mode is functionally identical to "Auto":
+"Recreate" mode is the recommended replacement for the deprecated "Auto" mode. It evicts and recreates pods to apply updated resource requests:
 
 ```bash
 kubectl apply -f k8s/vpa/step-05-vpa-recreate-mode.yaml
@@ -171,7 +176,7 @@ VPA provides three types of recommendations:
 VPA recreates pods when:
 - Current requests are significantly different from recommendations
 - The pod has been running long enough to establish a usage pattern
-- UpdateMode is "Auto" or "Recreate"
+- UpdateMode is "Recreate" (or the deprecated "Auto")
 
 ### VPA vs HPA
 
@@ -206,7 +211,7 @@ kubectl get pods -o wide
 
 ### Pods Not Being Updated
 
-- Ensure UpdateMode is "Auto" or "Recreate"
+- Ensure UpdateMode is "Recreate" (or deprecated "Auto")
 - Check that resource changes are significant enough (VPA has thresholds)
 - Review VPA events: `kubectl get events | grep -i vpa`
 
