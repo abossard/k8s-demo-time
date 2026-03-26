@@ -1,10 +1,32 @@
 # Cleanup all bin-packing tutorial resources
-apiVersion: v1
-kind: Namespace
+#
+# Usage:
+#   kubectl delete -f k8s/bin-packing/step-08-cleanup.yaml
+#   kubectl delete namespace bin-packing-demo --ignore-not-found
+#
+# The namespace deletion removes all namespaced resources.
+# The PriorityClasses below are cluster-scoped and must be deleted explicitly.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
 metadata:
-  name: bin-packing-demo
-  labels:
-    tutorial.k8s-demo/component: bin-packing
-  annotations:
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"v1","kind":"Namespace","metadata":{"name":"bin-packing-demo","labels":{"tutorial.k8s-demo/component":"bin-packing"}}}
+  name: high-priority
+value: 1000000
+globalDefault: false
+description: "High priority for critical services"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: normal-priority
+value: 1000
+globalDefault: false
+description: "Normal priority for standard services"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority
+value: 100
+globalDefault: false
+description: "Low priority for batch jobs and cache"

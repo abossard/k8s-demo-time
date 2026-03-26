@@ -194,9 +194,9 @@ kubectl scale deployment/backend -n bin-packing-demo --replicas=2
 **Concept:** Let VPA right-size requests based on actual usage patterns.
 
 **Changes from Step 4:**
-- Add VPA in Auto mode
+- Add VPA in Initial mode (sets resources only on pod creation, no restarts)
 - Start with lower initial requests
-- VPA adjusts over time
+- VPA adjusts resources when pods are recreated
 
 ```bash
 kubectl apply -f k8s/bin-packing/step-05-with-vpa.yaml
@@ -991,11 +991,11 @@ This creates a terminal recording you can share with others or embed in document
 Remove all resources:
 
 ```bash
-# Delete the entire namespace (removes all resources within it)
-kubectl delete namespace bin-packing-demo
+# Delete the entire namespace (removes all namespaced resources)
+kubectl delete namespace bin-packing-demo --ignore-not-found
 
-# Also clean up cluster-scoped PriorityClasses created in steps 6-7
-kubectl delete priorityclass high-priority normal-priority low-priority --ignore-not-found
+# Delete cluster-scoped PriorityClasses created in steps 6-7
+kubectl delete -f k8s/bin-packing/step-08-cleanup.yaml --ignore-not-found
 ```
 
 ## Key Learnings

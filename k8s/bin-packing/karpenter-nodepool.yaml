@@ -2,9 +2,9 @@
 apiVersion: karpenter.sh/v1
 kind: NodePool
 metadata:
-  name: default
+  name: bin-packing-demo
   annotations:
-    kubernetes.io/description: NodePool configured for bin-packing demo with 2 vCPU, 4GB RAM nodes (1-3 nodes)
+    kubernetes.io/description: NodePool configured for bin-packing demo with 4 vCPU nodes (dedicated, non-conflicting)
 spec:
   # Limit total resources to constrain node count (1-3 nodes with 2 CPU + 4GB each)
   limits:
