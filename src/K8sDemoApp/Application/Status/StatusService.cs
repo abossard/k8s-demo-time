@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -21,6 +22,7 @@ internal sealed class StatusService
     private readonly InstanceEnvironmentInfo _environment;
     private readonly ResourceCapacity _resourceRequests;
     private readonly ResourceCapacity _resourceLimits;
+    private readonly string _qosClass;
     private readonly Queue<CpuSample> _cpuSamples = new();
     private readonly object _resourceLock = new();
     private readonly Process _process;
@@ -38,6 +40,7 @@ internal sealed class StatusService
         _environment = BuildEnvironment();
         _resourceRequests = BuildCapacity("RESOURCE_REQUEST_CPU", "RESOURCE_REQUEST_MEMORY");
         _resourceLimits = BuildCapacity("RESOURCE_LIMIT_CPU", "RESOURCE_LIMIT_MEMORY");
+        _qosClass = DetectQosClass(_resourceRequests, _resourceLimits);
         _processorCount = Math.Max(Environment.ProcessorCount, 1);
         _process = Process.GetCurrentProcess();
 
@@ -61,7 +64,10 @@ internal sealed class StatusService
             _environment,
             resources,
             _probes.GetSnapshot(),
-            _stress.GetSnapshot());
+            _stress.GetSnapshot(),
+            _qosClass,
+            _probes.StartupHoldSeconds,
+            _probes.GetStartupHeldUntilUtc());
     }
 
     private InstanceEnvironmentInfo BuildEnvironment()
@@ -180,6 +186,65 @@ internal sealed class StatusService
         }
 
         return null;
+    }
+
+    private static string DetectQosClass(ResourceCapacity requests, ResourceCapacity limits)
+    {
+        var hasReqCpu = !string.IsNullOrEmpty(requests.Cpu);
+        var hasReqMem = !string.IsNullOrEmpty(requests.Memory);
+        var hasLimCpu = !string.IsNullOrEmpty(limits.Cpu);
+        var hasLimMem = !string.IsNullOrEmpty(limits.Memory);
+
+        if (!hasReqCpu && !hasReqMem && !hasLimCpu && !hasLimMem)
+            return "BestEffort";
+
+        if (hasReqCpu && hasReqMem && hasLimCpu && hasLimMem)
+        {
+            var cpuEqual = ParseCpuMillicores(requests.Cpu!) == ParseCpuMillicores(limits.Cpu!);
+            var memEqual = ParseMemoryBytes(requests.Memory!) == ParseMemoryBytes(limits.Memory!);
+            if (cpuEqual && memEqual)
+                return "Guaranteed";
+        }
+
+        return "Burstable";
+    }
+
+    private static long ParseCpuMillicores(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return 0;
+        value = value.Trim();
+
+        if (value.EndsWith('m'))
+        {
+            return double.TryParse(value.AsSpan(0, value.Length - 1), NumberStyles.Float, CultureInfo.InvariantCulture, out var m)
+                ? (long)Math.Round(m) : 0;
+        }
+
+        return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var cores)
+            ? (long)Math.Round(cores * 1000) : 0;
+    }
+
+    private static long ParseMemoryBytes(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return 0;
+        value = value.Trim();
+
+        if (value.EndsWith("Ki")) return ParseNumericPrefix(value, 2) * 1024L;
+        if (value.EndsWith("Mi")) return ParseNumericPrefix(value, 2) * 1024L * 1024;
+        if (value.EndsWith("Gi")) return ParseNumericPrefix(value, 2) * 1024L * 1024 * 1024;
+        if (value.EndsWith("Ti")) return ParseNumericPrefix(value, 2) * 1024L * 1024 * 1024 * 1024;
+        if (value.EndsWith("K")) return ParseNumericPrefix(value, 1) * 1000L;
+        if (value.EndsWith("M")) return ParseNumericPrefix(value, 1) * 1000L * 1000;
+        if (value.EndsWith("G")) return ParseNumericPrefix(value, 1) * 1000L * 1000 * 1000;
+        if (value.EndsWith("T")) return ParseNumericPrefix(value, 1) * 1000L * 1000 * 1000 * 1000;
+
+        return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var bytes) ? bytes : 0;
+    }
+
+    private static long ParseNumericPrefix(string value, int suffixLen)
+    {
+        return double.TryParse(value.AsSpan(0, value.Length - suffixLen), NumberStyles.Float, CultureInfo.InvariantCulture, out var n)
+            ? (long)Math.Round(n) : 0;
     }
 
     private readonly struct CpuSample

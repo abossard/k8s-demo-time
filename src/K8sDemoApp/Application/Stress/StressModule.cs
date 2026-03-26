@@ -71,7 +71,8 @@ internal static class StressModule
         }
 
         // Normal single-pod execution
-        var result = stress.StartCpuStress(duration, threads);
+        var rampSeconds = Math.Max(0, request.RampSeconds ?? 0);
+        var result = stress.StartCpuStress(duration, threads, rampSeconds);
         if (result.Success)
         {
             statusStream.Publish();

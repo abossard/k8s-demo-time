@@ -9,6 +9,8 @@ internal interface IProbeScheduler
     ProbeInfoDto Restore(ProbeType type);
     bool IsHealthy(ProbeType type);
     ProbeSnapshot GetSnapshot();
+    int StartupHoldSeconds { get; }
+    DateTimeOffset? GetStartupHeldUntilUtc();
 }
 
 internal sealed class ProbeStateStore : IProbeScheduler
@@ -16,6 +18,8 @@ internal sealed class ProbeStateStore : IProbeScheduler
     private readonly TimeProvider _timeProvider;
     private readonly Dictionary<ProbeType, ProbeState> _states;
     private readonly object _lock = new();
+    private readonly int _startupHoldSeconds;
+    private readonly DateTimeOffset? _startupHoldUntilUtc;
 
     public ProbeStateStore(TimeProvider timeProvider)
         : this(timeProvider, TimeSpan.Zero)
@@ -28,11 +32,22 @@ internal sealed class ProbeStateStore : IProbeScheduler
         _states = Enum.GetValues<ProbeType>()
             .ToDictionary(static type => type, static type => new ProbeState(type));
 
+        _startupHoldSeconds = (int)Math.Round(startupHoldDuration.TotalSeconds);
+
         if (startupHoldDuration > TimeSpan.Zero)
         {
             var holdUntil = _timeProvider.GetUtcNow().Add(startupHoldDuration);
             _states[ProbeType.Startup].DownUntilUtc = holdUntil;
+            _startupHoldUntilUtc = holdUntil;
         }
+    }
+
+    public int StartupHoldSeconds => _startupHoldSeconds;
+
+    public DateTimeOffset? GetStartupHeldUntilUtc()
+    {
+        if (_startupHoldUntilUtc is not { } until) return null;
+        return _timeProvider.GetUtcNow() < until ? until : null;
     }
 
     public ProbeInfoDto ScheduleDowntime(ProbeType type, TimeSpan duration)

@@ -9,7 +9,7 @@ using K8sDemoApp.Models;
 internal interface IStressSupervisor
 {
     event Action StatusChanged;
-    StressStartResult StartCpuStress(TimeSpan duration, int threads);
+    StressStartResult StartCpuStress(TimeSpan duration, int threads, int rampSeconds = 0);
     StressWorkloadStatus CancelCpuStress();
     StressStartResult StartMemoryStress(TimeSpan duration, int megabytes);
     StressWorkloadStatus CancelMemoryStress();
@@ -32,7 +32,7 @@ internal sealed class StressCoordinator : IStressSupervisor
         _timeProvider = timeProvider;
     }
 
-    public StressStartResult StartCpuStress(TimeSpan duration, int threads)
+    public StressStartResult StartCpuStress(TimeSpan duration, int threads, int rampSeconds = 0)
     {
         if (threads <= 0)
         {
@@ -58,16 +58,23 @@ internal sealed class StressCoordinator : IStressSupervisor
             {
                 cts = new CancellationTokenSource();
                 var token = cts.Token;
-                var tasks = new Task[threads];
+                var initialThreads = rampSeconds > 0 && threads > 1 ? 1 : threads;
+                var tasks = new List<Task>(threads);
 
-                for (var i = 0; i < threads; i++)
+                for (var i = 0; i < initialThreads; i++)
                 {
-                    tasks[i] = Task.Factory.StartNew(() => CpuWorker(token), token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                    tasks.Add(Task.Factory.StartNew(() => CpuWorker(token), token, TaskCreationOptions.LongRunning, TaskScheduler.Default));
                 }
 
                 var run = new CpuRun(now, expected, threads, cts, tasks);
                 _cpuRun = run;
-                _cpuSnapshot = new StressWorkloadStatus("cpu", true, now, expected, null, threads, null, null);
+                _cpuSnapshot = new StressWorkloadStatus("cpu", true, now, expected, null, initialThreads, null, null);
+
+                if (rampSeconds > 0 && threads > initialThreads)
+                {
+                    _ = RampCpuThreadsAsync(run, initialThreads, threads, rampSeconds);
+                }
+
                 _ = MonitorCpuAsync(run, duration);
                 notify = true;
                 result = StressStartResult.Successful(_cpuSnapshot);
@@ -200,6 +207,34 @@ internal sealed class StressCoordinator : IStressSupervisor
         }
     }
 
+    private async Task RampCpuThreadsAsync(CpuRun run, int currentThreads, int targetThreads, int rampSeconds)
+    {
+        var threadsToAdd = targetThreads - currentThreads;
+        if (threadsToAdd <= 0) return;
+
+        var intervalMs = (int)(rampSeconds * 1000.0 / threadsToAdd);
+        intervalMs = Math.Max(intervalMs, 100);
+
+        for (var i = 0; i < threadsToAdd; i++)
+        {
+            try
+            {
+                await Task.Delay(intervalMs, run.Cancellation.Token).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException) { return; }
+
+            lock (_lock)
+            {
+                if (!ReferenceEquals(_cpuRun, run)) return;
+                var task = Task.Factory.StartNew(() => CpuWorker(run.Cancellation.Token), run.Cancellation.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                run.Tasks.Add(task);
+                _cpuSnapshot = new StressWorkloadStatus("cpu", true, run.StartedAtUtc, run.ExpectedCompletionUtc, null, currentThreads + i + 1, null, null);
+            }
+
+            OnStatusChanged();
+        }
+    }
+
     private async Task MonitorCpuAsync(CpuRun run, TimeSpan duration)
     {
         try
@@ -254,6 +289,44 @@ internal sealed class StressCoordinator : IStressSupervisor
         }
     }
 
+    private async Task RampCpuAsync(CpuRun run, int currentThreads, int targetThreads, int rampSeconds)
+    {
+        var remaining = targetThreads - currentThreads;
+        if (remaining <= 0) return;
+
+        var intervalMs = (rampSeconds * 1000.0) / remaining;
+        var token = run.Cancellation.Token;
+
+        for (var i = 0; i < remaining; i++)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(intervalMs), token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            var notify = false;
+            lock (_lock)
+            {
+                if (!ReferenceEquals(_cpuRun, run)) return;
+
+                var task = Task.Factory.StartNew(() => CpuWorker(token), token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                run.Tasks.Add(task);
+                var newCount = currentThreads + i + 1;
+                _cpuSnapshot = _cpuSnapshot with { ThreadCount = newCount };
+                notify = true;
+            }
+
+            if (notify)
+            {
+                OnStatusChanged();
+            }
+        }
+    }
+
     private bool StopCpuLocked(string? error)
     {
         var changed = false;
@@ -276,11 +349,12 @@ internal sealed class StressCoordinator : IStressSupervisor
         run.Cancellation.Cancel();
         var completed = _timeProvider.GetUtcNow();
         _cpuSnapshot = new StressWorkloadStatus("cpu", false, run.StartedAtUtc, run.ExpectedCompletionUtc, completed, run.ThreadCount, null, error);
+        var tasksCopy = run.Tasks.ToArray();
         _ = Task.Run(async () =>
         {
             try
             {
-                await Task.WhenAll(run.Tasks).ConfigureAwait(false);
+                await Task.WhenAll(tasksCopy).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -366,7 +440,7 @@ internal sealed class StressCoordinator : IStressSupervisor
 
     private sealed class CpuRun
     {
-        public CpuRun(DateTimeOffset startedAtUtc, DateTimeOffset expectedCompletionUtc, int threadCount, CancellationTokenSource cancellation, Task[] tasks)
+        public CpuRun(DateTimeOffset startedAtUtc, DateTimeOffset expectedCompletionUtc, int threadCount, CancellationTokenSource cancellation, List<Task> tasks)
         {
             StartedAtUtc = startedAtUtc;
             ExpectedCompletionUtc = expectedCompletionUtc;
@@ -379,7 +453,7 @@ internal sealed class StressCoordinator : IStressSupervisor
         public DateTimeOffset ExpectedCompletionUtc { get; }
         public int ThreadCount { get; }
         public CancellationTokenSource Cancellation { get; }
-        public Task[] Tasks { get; }
+        public List<Task> Tasks { get; }
     }
 
     private sealed class MemoryRun

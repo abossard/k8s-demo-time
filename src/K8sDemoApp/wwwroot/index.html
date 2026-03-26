@@ -200,6 +200,33 @@
       border: 1px solid rgba(248, 113, 113, 0.4);
     }
 
+    .qos-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.6rem;
+      border-radius: 0.4rem;
+      font-weight: 600;
+      font-size: 0.85rem;
+      letter-spacing: 0.03em;
+    }
+    .qos-guaranteed { background: rgba(74, 222, 128, 0.18); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.4); }
+    .qos-burstable { background: rgba(250, 204, 21, 0.18); color: #facc15; border: 1px solid rgba(250, 204, 21, 0.4); }
+    .qos-besteffort { background: rgba(248, 113, 113, 0.18); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.4); }
+
+    .startup-hold-banner {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1rem;
+      border-radius: 0.5rem;
+      background: rgba(250, 204, 21, 0.12);
+      border: 1px solid rgba(250, 204, 21, 0.35);
+      color: #facc15;
+      font-size: 0.9rem;
+      font-weight: 500;
+      margin-bottom: 0.75rem;
+    }
+
     #notifications {
       min-height: 1.2rem;
       font-size: 0.95rem;
@@ -368,6 +395,10 @@
             <span class="meta-label">Memory Limit</span>
             <span class="meta-value" id="resource-limit-memory">–</span>
           </div>
+          <div class="meta-item">
+            <span class="meta-label">QoS Class</span>
+            <span class="meta-value"><span class="qos-badge" id="qos-class">–</span></span>
+          </div>
         </div>
         <div class="meta-grid">
           <div class="meta-item">
@@ -388,6 +419,9 @@
 
     <section id="probes">
       <h2>Probes</h2>
+      <div id="startup-hold-info" class="startup-hold-banner" style="display: none;">
+        ⏳ Startup hold: <strong id="startup-hold-remaining">–</strong>
+      </div>
       <div class="grid">
         <div class="probe" data-probe="startup">
           <div class="probe-header">
@@ -472,6 +506,9 @@
         </label>
         <label>Threads
           <input type="number" min="1" step="1" value="4" id="cpu-threads-input">
+        </label>
+        <label>Ramp (s)
+          <input type="number" min="0" step="5" value="0" id="cpu-ramp-seconds">
         </label>
         <label>
           <input type="checkbox" id="cpu-broadcast">
@@ -790,6 +827,65 @@
       setMetaValue('resource-usage-managed', managed);
     }
 
+    function updateQosClass(qosClass) {
+      const el = document.getElementById('qos-class');
+      if (!el) return;
+      el.textContent = qosClass || '–';
+      el.className = 'qos-badge';
+      if (qosClass === 'Guaranteed') {
+        el.classList.add('qos-guaranteed');
+      } else if (qosClass === 'Burstable') {
+        el.classList.add('qos-burstable');
+      } else if (qosClass === 'BestEffort') {
+        el.classList.add('qos-besteffort');
+      }
+    }
+
+    let startupHoldTimer = null;
+    let startupHeldUntilUtc = null;
+
+    function updateStartupHold(data) {
+      const container = document.getElementById('startup-hold-info');
+      const remaining = document.getElementById('startup-hold-remaining');
+      if (!container || !remaining) return;
+
+      if (data.startupHeldUntilUtc) {
+        startupHeldUntilUtc = new Date(data.startupHeldUntilUtc);
+        container.style.display = 'flex';
+        updateStartupHoldCountdown();
+        if (!startupHoldTimer) {
+          startupHoldTimer = setInterval(updateStartupHoldCountdown, 1000);
+        }
+      } else {
+        startupHeldUntilUtc = null;
+        container.style.display = 'none';
+        if (startupHoldTimer) {
+          clearInterval(startupHoldTimer);
+          startupHoldTimer = null;
+        }
+      }
+    }
+
+    function updateStartupHoldCountdown() {
+      const remaining = document.getElementById('startup-hold-remaining');
+      if (!remaining || !startupHeldUntilUtc) return;
+
+      const now = new Date();
+      const diff = startupHeldUntilUtc - now;
+      if (diff <= 0) {
+        remaining.textContent = 'expired';
+        document.getElementById('startup-hold-info').style.display = 'none';
+        if (startupHoldTimer) {
+          clearInterval(startupHoldTimer);
+          startupHoldTimer = null;
+        }
+        return;
+      }
+
+      const seconds = Math.ceil(diff / 1000);
+      remaining.textContent = `${seconds}s remaining`;
+    }
+
     function updateInstance(data) {
       document.getElementById('hostname').textContent = data.hostname ?? '–';
       document.getElementById('started').textContent = formatDate(data.startedAtUtc);
@@ -805,6 +901,7 @@
 
       updateEnvironment(data.environment ?? null);
       updateResources(data.resources ?? null);
+      updateQosClass(data.qosClass ?? null);
     }
 
     function updateProbes(data) {
@@ -1087,6 +1184,7 @@
       applyHostTheme(data.hostname);
       updateInstance(data);
       updateProbes(data);
+      updateStartupHold(data);
       updateCpu(data);
       updateMemory(data);
       const cpuError = data?.stress?.cpu?.lastError;

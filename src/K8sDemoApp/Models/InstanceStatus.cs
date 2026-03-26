@@ -11,7 +11,10 @@ public sealed record InstanceStatusResponse(
     InstanceEnvironmentInfo Environment,
     InstanceResourcesInfo Resources,
     ProbeSnapshot Probes,
-    StressSnapshot Stress);
+    StressSnapshot Stress,
+    string QosClass,
+    int StartupHoldSeconds,
+    DateTimeOffset? StartupHeldUntilUtc);
 
 public sealed record InstanceEnvironmentInfo(
     IReadOnlyList<string> IpAddresses,
