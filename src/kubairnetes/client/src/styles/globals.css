@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+@theme {
+  --color-kube-blue: #326CE5;
+  --color-kube-dark: #0f172a;
+  --color-kube-surface: #1e293b;
+  --color-kube-surface-light: #334155;
+  --color-kube-border: #475569;
+  --color-kube-glow: #60a5fa;
+  --color-kube-success: #22c55e;
+  --color-kube-warning: #f59e0b;
+  --color-kube-danger: #ef4444;
+  --color-kube-info: #06b6d4;
+  --color-kube-muted: #94a3b8;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-kube-dark); }
+::-webkit-scrollbar-thumb { background: var(--color-kube-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-kube-glow); }
+
+/* Markdown content styles */
+.slide-content h2 { @apply text-2xl font-bold text-white mb-4; }
+.slide-content h3 { @apply text-xl font-semibold text-slate-200 mb-3 mt-6; }
+.slide-content h4 { @apply text-lg font-medium text-slate-300 mb-2 mt-4; }
+.slide-content p { @apply text-slate-300 mb-3 leading-relaxed; }
+.slide-content ul { @apply list-disc list-inside text-slate-300 mb-3 space-y-1; }
+.slide-content ol { @apply list-decimal list-inside text-slate-300 mb-3 space-y-1; }
+.slide-content li { @apply text-slate-300; }
+.slide-content strong { @apply text-white font-semibold; }
+.slide-content em { @apply text-slate-200 italic; }
+.slide-content a { @apply text-kube-glow hover:underline; }
+.slide-content blockquote {
+  @apply border-l-4 border-kube-blue pl-4 py-1 my-3 bg-kube-surface/50 rounded-r;
+}
+.slide-content table {
+  @apply w-full border-collapse mb-4;
+}
+.slide-content th {
+  @apply bg-kube-surface-light text-slate-200 font-semibold text-left px-3 py-2 border border-kube-border;
+}
+.slide-content td {
+  @apply text-slate-300 px-3 py-2 border border-kube-border;
+}
+.slide-content pre {
+  @apply bg-kube-dark border border-kube-border rounded-lg p-4 mb-4 overflow-x-auto;
+}
+.slide-content code {
+  @apply font-mono text-sm;
+}
+.slide-content :not(pre) > code {
+  @apply bg-kube-surface-light text-kube-glow px-1.5 py-0.5 rounded text-sm;
+}
+
+/* Glow effects */
+.glow-blue { box-shadow: 0 0 20px rgba(96, 165, 250, 0.15); }
+.glow-green { box-shadow: 0 0 20px rgba(34, 197, 94, 0.15); }
+.glow-red { box-shadow: 0 0 20px rgba(239, 68, 68, 0.15); }
+
+/* Transitions */
+.slide-enter { animation: slideIn 0.3s ease-out; }
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Terminal */
+.xterm-container .xterm { padding: 8px; }
+
+/* Chat bubble animations */
+.chat-bubble { animation: fadeUp 0.2s ease-out; }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Resizer */
+.resizer {
+  @apply w-1.5 cursor-col-resize bg-kube-border/50 hover:bg-kube-glow/50 transition-colors;
+  flex-shrink: 0;
+}
+
+/* Concept visual blocks */
+.concept-visual {
+  @apply rounded-xl border border-kube-info/20 bg-kube-info/5 p-4;
+  animation: conceptFadeIn 0.5s ease-out;
+}
+
+/* Build step progressive reveal */
+.build-step-enter {
+  animation: buildStepIn 0.35s ease-out;
+}
+
+@keyframes buildStepIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes conceptFadeIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Animate-in for collapsible sections */
+.animate-in {
+  animation: expandIn 0.2s ease-out;
+}
+
+@keyframes expandIn {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 2000px; }
+}
+
+/* Range input styling */
+input[type="range"] {
+  @apply h-1.5 rounded-full appearance-none bg-kube-surface-light cursor-pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  @apply appearance-none w-3 h-3 rounded-full bg-kube-glow cursor-pointer;
+}

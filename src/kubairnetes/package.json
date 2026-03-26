@@ -1,0 +1,18 @@
+{
+  "name": "kubairnetes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KubAIrnetes — Interactive K8s tutorial presenter powered by GitHub Copilot SDK",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build": "npm run build:client && npm run build:server",
+    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm run build",
+    "start": "cd server && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
