@@ -53,7 +53,7 @@ graph LR
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | Prometheus | `opencost-prometheus-server.opencost.svc.cluster.local:80` | Metric storage for custom metric scaling |
-| k8s-demo-app image | `k8sdemoanbo.azurecr.io/k8s-demo-app:latest` | Our demo application |
+| k8s-demo-app image | `ghcr.io/abossard/k8s-demo-app:latest` | Our demo application |
 
 ### Optional but Recommended
 

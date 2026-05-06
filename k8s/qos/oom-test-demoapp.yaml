@@ -9,7 +9,7 @@ metadata:
 spec:
   containers:
   - name: demo-app
-    image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+    image: ghcr.io/abossard/k8s-demo-app:latest
     imagePullPolicy: Always
     ports:
     - containerPort: 8080

@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: k8s-demo-app
-          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest # replace with $REGISTRY_LOGIN_SERVER/k8s-demo-app:<tag>
+          image: ghcr.io/abossard/k8s-demo-app:latest # replace with $REGISTRY_LOGIN_SERVER/k8s-demo-app:<tag>
           imagePullPolicy: Always
           env:
             - name: ASPNETCORE_URLS

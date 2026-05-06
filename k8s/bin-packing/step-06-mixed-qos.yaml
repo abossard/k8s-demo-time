@@ -63,7 +63,7 @@ spec:
       priorityClassName: high-priority
       containers:
         - name: k8s-demo-app
-          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          image: ghcr.io/abossard/k8s-demo-app:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: ASPNETCORE_URLS
@@ -158,7 +158,7 @@ spec:
       priorityClassName: normal-priority
       containers:
         - name: k8s-demo-app
-          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          image: ghcr.io/abossard/k8s-demo-app:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: ASPNETCORE_URLS
@@ -253,7 +253,7 @@ spec:
       priorityClassName: low-priority
       containers:
         - name: k8s-demo-app
-          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          image: ghcr.io/abossard/k8s-demo-app:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: ASPNETCORE_URLS
@@ -322,7 +322,7 @@ spec:
       priorityClassName: low-priority
       containers:
         - name: k8s-demo-app
-          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          image: ghcr.io/abossard/k8s-demo-app:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: ASPNETCORE_URLS

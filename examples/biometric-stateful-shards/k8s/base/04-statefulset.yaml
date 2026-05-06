@@ -74,7 +74,7 @@ spec:
           # IMPORTANT: Replace with your actual ACR image URL
           # Example: myregistry.azurecr.io/k8s-demo-app:latest
           # See main README for build and push instructions
-          image: k8sdemoanbo.azurecr.io/k8s-demo-app:latest
+          image: ghcr.io/abossard/k8s-demo-app:latest
           imagePullPolicy: Always
 
           ports:
