@@ -47,32 +47,112 @@ Navigate to <http://localhost:8080> to open the dashboard. Key API routes:
 
 **New**: All stress, probe, and chaos endpoints support an optional `broadcastToAll` parameter. When set to `true`, the action is coordinated across all replicas using DNS-based service discovery. See [BROADCAST-COORDINATION.md](BROADCAST-COORDINATION.md) for details.
 
+## Dashboard
+
+The built-in web dashboard at `/` provides real-time controls for all features:
+
+![Dashboard Overview](docs/screenshots/dashboard-overview.png)
+
+### Instance Info
+Shows hostname, uptime, pod metadata, resource requests/limits, QoS class, and live CPU/memory metrics.
+
+![Instance Info](docs/screenshots/instance-info.png)
+
+### Probe Controls
+Toggle startup, readiness, and liveness probes on/off with configurable downtime. Supports broadcast to all replicas.
+
+![Probes Section](docs/screenshots/probes-section.png)
+
+### Stress Testing
+Generate CPU and memory pressure with configurable duration, threads, and ramp-up time.
+
+![Stress Section](docs/screenshots/stress-section.png)
+
+### Chaos Engineering
+Crash the process or freeze request handling to observe probe behaviour and restarts.
+
+![Chaos Section](docs/screenshots/chaos-section.png)
+
 ## Container Image
 
-The top-level `Dockerfile` publishes a self-contained native AOT binary using the .NET 10 preview images. After the Azure deployment finishes (next section), use the generated registry to host workshop images:
+The image is published to **GitHub Container Registry** as a public multi-arch image (amd64 + arm64):
 
-```bash
-# Capture the registry login server output by the deployment
-REGISTRY_LOGIN_SERVER=$(az acr show --name $REGISTRY_NAME --query loginServer -o tsv)
-
-# Ensure we emit AMD64 layers (required for AKS nodes)
-export DOCKER_DEFAULT_PLATFORM=linux/amd64
-
-# Build and tag the image – use a meaningful tag such as the git SHA or a release version
-IMAGE_TAG=$(git rev-parse --short HEAD)
-docker build --platform linux/amd64 -t $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG .
-
-# Push to ACR (authenticates with the registry first)
-az acr login --name $REGISTRY_NAME
-docker push $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG
-
-# (Optional) Maintain a "latest" tag for demos
-docker tag $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG \
-           $REGISTRY_LOGIN_SERVER/k8s-demo-app:latest
-docker push $REGISTRY_LOGIN_SERVER/k8s-demo-app:latest
+```
+ghcr.io/abossard/k8s-demo-app:latest
 ```
 
-Anonymous pull access is enabled by default in the Bicep template, so workshop clusters can pull without additional credentials. Pushes still require authentication via `az acr login`.
+A [GitHub Actions workflow](.github/workflows/docker-publish.yml) automatically builds and pushes on every push to `main` and on version tags (`v*`).
+
+### Run Locally
+
+```bash
+docker run -d -p 8080:8080 ghcr.io/abossard/k8s-demo-app:latest
+```
+
+Browse to <http://localhost:8080> to open the dashboard.
+
+### Build Locally
+
+```bash
+docker build -t k8s-demo-app:local .
+docker run -d -p 8080:8080 k8s-demo-app:local
+```
+
+### Custom Registry (ACR)
+
+If you prefer Azure Container Registry, push the GHCR image or build your own:
+
+```bash
+REGISTRY_LOGIN_SERVER=$(az acr show --name $REGISTRY_NAME --query loginServer -o tsv)
+IMAGE_TAG=$(git rev-parse --short HEAD)
+docker build --platform linux/amd64 -t $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG .
+az acr login --name $REGISTRY_NAME
+docker push $REGISTRY_LOGIN_SERVER/k8s-demo-app:$IMAGE_TAG
+```
+
+## Environment Variables
+
+All environment variables are **optional**. When running outside Kubernetes, fields populated by the Downward API will show as `–` in the dashboard.
+
+### Application Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ASPNETCORE_URLS` | Bind address for the web server | `http://+:8080` |
+| `HOLD_STARTUP_SECONDS` | Delay startup probe success by N seconds (simulates slow init) | `0` |
+| `SERVICE_NAME` | Headless service name used for DNS-based pod discovery | `k8s-demo-app-headless` |
+
+### Pod Identity (Kubernetes Downward API)
+
+These are typically injected via `fieldRef` in the deployment manifest:
+
+| Variable | Downward API Field | Shown in Dashboard |
+|----------|-------------------|-------------------|
+| `POD_NAME` | `metadata.name` | Pod Name |
+| `POD_NAMESPACE` | `metadata.namespace` | Pod Namespace (also used for broadcast DNS) |
+| `POD_UID` | `metadata.uid` | Pod UID |
+| `POD_IP` | `status.podIP` | Pod IP |
+| `POD_SERVICE_ACCOUNT` | `spec.serviceAccountName` | Service Account |
+| `NODE_NAME` | `spec.nodeName` | Node Name |
+| `NODE_IP` | `status.hostIP` | Node IP |
+
+### Cluster Metadata
+
+| Variable | Description |
+|----------|-------------|
+| `CLUSTER_NAME` | Display name for the cluster |
+| `CLUSTER_DOMAIN` | Cluster DNS domain (e.g., `cluster.local`) |
+
+### Resource Metrics (Kubernetes resourceFieldRef)
+
+These power the QoS class detection and resource display:
+
+| Variable | resourceFieldRef | Shown in Dashboard |
+|----------|-----------------|-------------------|
+| `RESOURCE_REQUEST_CPU` | `requests.cpu` | CPU Request |
+| `RESOURCE_REQUEST_MEMORY` | `requests.memory` | Memory Request |
+| `RESOURCE_LIMIT_CPU` | `limits.cpu` | CPU Limit |
+| `RESOURCE_LIMIT_MEMORY` | `limits.memory` | Memory Limit |
 
 ## Azure Deployment (Bicep)
 
@@ -116,7 +196,9 @@ Want to experiment with the preview Node Auto Provisioning feature? Append `enab
 
 ## Kubernetes Deployment
 
-The manifest in `k8s/deployment.yaml` deploys two replicas with startup, readiness, and liveness probes and exposes them via a ClusterIP service. After pushing your image, update `k8s/deployment.yaml` (and the tutorial manifests under `k8s/hpa/`) so the `image:` field points at `${REGISTRY_LOGIN_SERVER}/k8s-demo-app:${IMAGE_TAG}`. Then apply the manifest:
+The manifest in `k8s/deployment.yaml` deploys two replicas with startup, readiness, and liveness probes and exposes them via a LoadBalancer service and a headless service for broadcast coordination.
+
+### Quick Start
 
 ```bash
 kubectl apply -f k8s/deployment.yaml
@@ -124,6 +206,148 @@ kubectl port-forward svc/k8s-demo-app 8080:80
 ```
 
 Browse to <http://localhost:8080> to interact with a pod, toggle probes, and trigger stress workloads for autoscaling demos.
+
+### Example Deployment
+
+Below is a minimal standalone deployment you can customise. It includes the Downward API env vars that populate the dashboard and the three probe types:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-demo-app
+  labels:
+    app: k8s-demo-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: k8s-demo-app
+  template:
+    metadata:
+      labels:
+        app: k8s-demo-app
+    spec:
+      containers:
+        - name: k8s-demo-app
+          image: ghcr.io/abossard/k8s-demo-app:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # --- Application config ---
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: HOLD_STARTUP_SECONDS
+              value: "5"
+            - name: SERVICE_NAME
+              value: "k8s-demo-app-headless"
+            # --- Pod identity (Downward API) ---
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            # --- Cluster metadata ---
+            - name: CLUSTER_NAME
+              value: "my-cluster"
+            - name: CLUSTER_DOMAIN
+              value: "cluster.local"
+            # --- Resource metrics (for QoS display) ---
+            - name: RESOURCE_REQUEST_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.cpu
+            - name: RESOURCE_REQUEST_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: requests.memory
+            - name: RESOURCE_LIMIT_CPU
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.cpu
+            - name: RESOURCE_LIMIT_MEMORY
+              valueFrom:
+                resourceFieldRef:
+                  containerName: k8s-demo-app
+                  resource: limits.memory
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            failureThreshold: 20
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-demo-app
+spec:
+  selector:
+    app: k8s-demo-app
+  ports:
+    - port: 80
+      targetPort: http
+  type: LoadBalancer
+---
+# Headless service for cross-replica broadcast coordination
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-demo-app-headless
+spec:
+  clusterIP: None
+  selector:
+    app: k8s-demo-app
+  ports:
+    - port: 8080
+      targetPort: http
+```
 
 ## HPA Learning Plan
 
