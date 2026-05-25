@@ -15,7 +15,7 @@
     "remark-gfm": "^4.0.0",
     "rehype-highlight": "^7.0.2",
     "d3": "^7.9.0",
-    "mermaid": "^11.4.0",
+    "mermaid": "^11.15.0",
     "@xterm/xterm": "^5.5.0",
     "@xterm/addon-fit": "^0.10.0",
     "lucide-react": "^0.468.0"
